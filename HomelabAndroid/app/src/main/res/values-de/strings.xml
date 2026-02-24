@@ -86,7 +86,7 @@
     <!-- Beszel -->
     <string name="beszel_cpu">CPU</string>
     <string name="beszel_ram">RAM</string>
-    <string name="beszel_disk">DISK</string>
+    <string name="beszel_disk">Disks</string>
     <string name="beszel_network">NETZWERK</string>
     <string name="beszel_uptime">UPTIME</string>
     <string name="beszel_system_details">Systemdetails</string>

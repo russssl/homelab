@@ -4,7 +4,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -15,19 +14,12 @@ data class BeszelSystem(
     val collectionName: String? = null,
     val name: String,
     val host: String,
-    // Port can be Int or String in the JSON, custom deserializer or raw element if needed.
-    // We'll use JsonElement to handle both cases safely.
-    val port: JsonElement? = null,
     val status: String,
     val info: BeszelSystemInfo? = null,
     val created: String? = null,
     val updated: String? = null
 ) {
     val isOnline: Boolean get() = status == "up"
-
-    val portValue: Int? get() {
-        return port?.jsonPrimitive?.intOrNull ?: port?.jsonPrimitive?.content?.toIntOrNull()
-    }
 }
 
 @Serializable
@@ -38,6 +30,9 @@ data class BeszelSystemInfo(
     val mt: Double? = null,
     val dp: Double? = null,
     val d: Double? = null,
+    // Beszel >=0.9 exposes du (used) + d (total) for disk.
+    // Keep dt for backwards compatibility but prefer du/d.
+    val du: Double? = null,
     val dt: Double? = null,
     val ns: Double? = null,
     val nr: Double? = null,
@@ -55,6 +50,7 @@ data class BeszelSystemInfo(
     val mtValue: Double get() = mt ?: 0.0
     val dpValue: Double get() = dp ?: 0.0
     val dValue: Double get() = d ?: 0.0
+    val duValue: Double get() = du ?: 0.0
     val dtValue: Double get() = dt ?: 0.0
     val nsValue: Double get() = ns ?: 0.0
     val nrValue: Double get() = nr ?: 0.0
@@ -86,6 +82,7 @@ data class BeszelRecordStats(
     val mt: Double? = null,
     val dp: Double? = null,
     val d: Double? = null,
+    val du: Double? = null,
     val dt: Double? = null,
     val ns: Double? = null,
     val nr: Double? = null,
@@ -103,6 +100,7 @@ data class BeszelRecordStats(
     val mtValue: Double get() = mt ?: 0.0
     val dpValue: Double get() = dp ?: 0.0
     val dValue: Double get() = d ?: 0.0
+    val duValue: Double get() = du ?: 0.0
     val dtValue: Double get() = dt ?: 0.0
     val nsValue: Double get() = ns ?: 0.0
     val nrValue: Double get() = nr ?: 0.0

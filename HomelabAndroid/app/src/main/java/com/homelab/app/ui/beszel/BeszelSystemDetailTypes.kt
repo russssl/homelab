@@ -13,4 +13,10 @@ internal data class BandwidthPoint(
     val txBytesPerSec: Double
 )
 
+internal data class DiskFsUsage(
+    val label: String,
+    val usedGb: Double,
+    val totalGb: Double
+)
+
 

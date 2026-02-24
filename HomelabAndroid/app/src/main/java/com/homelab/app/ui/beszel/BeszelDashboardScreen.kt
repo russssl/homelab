@@ -239,8 +239,8 @@ private fun SystemCard(system: BeszelSystem, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            // Host text
-            Text("${system.host}:${system.portValue ?: ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Host text (without port, Beszel port is implicit)
+            Text(system.host, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

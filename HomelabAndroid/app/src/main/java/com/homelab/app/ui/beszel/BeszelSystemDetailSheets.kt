@@ -217,6 +217,99 @@ internal fun ExtraMetricDetailsSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+internal fun DiskFsDetailsSheet(
+    drive: DiskFsUsage,
+    history: List<BeszelRecordStats>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val selectedIndex = remember { mutableStateOf<Int?>(null) }
+
+    // Build usage history for this filesystem (percentage used)
+    val data = if (drive.label == "root") {
+        history.mapNotNull { stats ->
+            val total = stats.dValue
+            val used = stats.duValue
+            if (total <= 0.0) return@mapNotNull null
+            (used / total * 100.0).coerceIn(0.0, 100.0)
+        }
+    } else {
+        history.mapNotNull { stats ->
+            val entry = stats.efs?.get(drive.label) ?: return@mapNotNull null
+            val total = entry.d ?: return@mapNotNull null
+            val used = entry.du ?: return@mapNotNull null
+            if (total <= 0.0) return@mapNotNull null
+            (used / total * 100.0).coerceIn(0.0, 100.0)
+        }
+    }
+
+    val min = data.minOrNull()
+    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.beszel_disk) + " • ${drive.label}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "${formatGB(drive.usedGb)} / ${formatGB(drive.totalGb)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (data.size >= 2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val leftParts = buildList {
+                        min?.let { add("Min: ${String.format("%.1f%%", it)}") }
+                        avg?.let { add("Avg: ${String.format("%.1f%%", it)}") }
+                    }
+                    if (leftParts.isNotEmpty()) {
+                        Text(
+                            text = leftParts.joinToString("   "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = StatusOrange,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = { v -> String.format("%s: %.1f%%", drive.label, v) }
+                )
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun ResourceMetricDetailsSheet(
     title: String,
     data: List<Double>,

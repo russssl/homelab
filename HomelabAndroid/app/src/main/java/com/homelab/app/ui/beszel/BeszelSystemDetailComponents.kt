@@ -112,7 +112,7 @@ internal fun BeszelHeaderCard(system: BeszelSystem) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(system.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "${system.host}:${system.portValue ?: 80}",
+                    system.host,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -260,10 +260,14 @@ internal fun ResourcesSection(
     cpu: Double,
     mp: Double,
     dp: Double,
+    diskUsed: Double? = null,
+    diskTotal: Double? = null,
+    externalFileSystems: List<DiskFsUsage> = emptyList(),
     cpuHistory: List<Double> = emptyList(),
     memHistory: List<Double> = emptyList(),
     onCpuClick: () -> Unit = {},
-    onMemClick: () -> Unit = {}
+    onMemClick: () -> Unit = {},
+    onDiskFsClick: (DiskFsUsage) -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader(icon = Icons.Default.Layers, title = stringResource(R.string.beszel_resources_title))
@@ -286,12 +290,145 @@ internal fun ResourcesSection(
             onClick = onMemClick
         )
 
-        ResourceCard(
-            icon = Icons.Default.Storage,
-            iconColor = StatusOrange,
-            title = stringResource(R.string.beszel_disk),
-            percent = dp
-        )
+        // Root + external filesystems share a single disk card, with one bar per drive
+        val diskItems = mutableListOf<DiskFsUsage>()
+
+        if (diskUsed != null && diskTotal != null && diskTotal > 0.0) {
+            diskItems.add(DiskFsUsage(label = "root", usedGb = diskUsed, totalGb = diskTotal))
+        }
+
+        externalFileSystems.forEach { fs ->
+            if (fs.totalGb > 0.0) {
+                diskItems.add(fs)
+            }
+        }
+
+        if (diskItems.isNotEmpty()) {
+            DiskResourceCard(dp = dp, items = diskItems, onDiskFsClick = onDiskFsClick)
+        }
+    }
+}
+
+@Composable
+internal fun DiskResourceCard(
+    dp: Double,
+    items: List<DiskFsUsage>,
+    onDiskFsClick: (DiskFsUsage) -> Unit
+) {
+    val totalUsed = items.sumOf { it.usedGb }.coerceAtLeast(0.0)
+    val totalCapacity = items.sumOf { it.totalGb }.coerceAtLeast(0.0)
+
+    val overallPercent = if (totalCapacity > 0) {
+        (totalUsed / totalCapacity * 100.0).coerceIn(0.0, 100.0)
+    } else {
+        dp.coerceIn(0.0, 100.0)
+    }
+    val overallColor = when {
+        overallPercent > 90 -> StatusRed
+        overallPercent > 70 -> StatusOrange
+        else -> StatusGreen
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Card header shows overall disk status
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = StatusOrange.copy(alpha = 0.1f),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Storage, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Text(stringResource(R.string.beszel_disk), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        String.format("%.1f%%", overallPercent),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = overallColor
+                    )
+                    if (totalCapacity > 0.0) {
+                        Text(
+                            "${formatGB(totalUsed)} / ${formatGB(totalCapacity)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // One labeled bar per filesystem, with chevron to open details
+            items.forEach { fs ->
+                val percent = (fs.usedGb / fs.totalGb * 100.0).coerceIn(0.0, 100.0)
+                val barColor = when {
+                    percent > 90 -> StatusRed
+                    percent > 70 -> StatusOrange
+                    else -> StatusGreen
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDiskFsClick(fs) },
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            fs.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            String.format("%.1f%%", percent),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = barColor
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isThemeDark()) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        val progress = (percent / 100.0).coerceIn(0.0, 1.0).toFloat()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress)
+                                .height(6.dp)
+                                .background(Brush.horizontalGradient(listOf(barColor.copy(alpha = 0.7f), barColor)))
+                        )
+                    }
+
+                    Text(
+                        "${formatGB(fs.usedGb)} used / ${formatGB(fs.totalGb)} total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -550,10 +687,15 @@ internal fun ResourceCard(
                 )
             }
 
-            if (detailLeft != null && detailRight != null) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(detailLeft, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(detailRight, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (detailLeft != null || detailRight != null) {
+                if (detailLeft != null && detailRight != null) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(detailLeft, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(detailRight, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    val text = detailLeft ?: detailRight.orEmpty()
+                    Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 

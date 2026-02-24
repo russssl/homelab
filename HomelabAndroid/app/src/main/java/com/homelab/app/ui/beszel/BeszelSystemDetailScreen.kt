@@ -77,8 +77,22 @@ fun BeszelSystemDetailScreen(
             val cpuHistory = records.takeLast(30).map { it.stats.cpuValue }
             val memHistory = records.takeLast(30).map { it.stats.mpValue }
 
+            // Disk: Beszel stats expose d = total (GB), du = used (GB)
+            val diskUsed = (latestStats?.duValue ?: info?.duValue)?.takeIf { it > 0.0 }
+            val diskTotal = (latestStats?.dValue ?: info?.dValue)?.takeIf { it > 0.0 }
+
+            val externalFileSystems = latestStats?.efs
+                ?.mapNotNull { (key, entry) ->
+                    val total = entry.d ?: return@mapNotNull null
+                    val used = entry.du ?: return@mapNotNull null
+                    if (total <= 0.0 || used < 0.0) return@mapNotNull null
+                    DiskFsUsage(label = key, usedGb = used, totalGb = total)
+                }
+                .orEmpty()
+
             val expandedMetric = remember { mutableStateOf<ExtraMetricType?>(null) }
             val expandedResourceMetric = remember { mutableStateOf<ResourceMetricType?>(null) }
+            val expandedDiskFs = remember { mutableStateOf<DiskFsUsage?>(null) }
 
             LazyColumn(
                 modifier = Modifier
@@ -102,10 +116,14 @@ fun BeszelSystemDetailScreen(
                             cpu = info.cpuValue,
                             mp = info.mpValue,
                             dp = info.dpValue,
+                            diskUsed = diskUsed,
+                            diskTotal = diskTotal,
+                            externalFileSystems = externalFileSystems,
                             cpuHistory = cpuHistory,
                             memHistory = memHistory,
                             onCpuClick = { expandedResourceMetric.value = ResourceMetricType.CPU },
-                            onMemClick = { expandedResourceMetric.value = ResourceMetricType.MEMORY }
+                            onMemClick = { expandedResourceMetric.value = ResourceMetricType.MEMORY },
+                            onDiskFsClick = { expandedDiskFs.value = it }
                         )
                     }
 
@@ -165,6 +183,14 @@ fun BeszelSystemDetailScreen(
                     accent = accent,
                     unitFormatter = formatter,
                     onDismiss = { expandedResourceMetric.value = null }
+                )
+            }
+
+            expandedDiskFs.value?.let { fs ->
+                DiskFsDetailsSheet(
+                    drive = fs,
+                    history = statsHistory,
+                    onDismiss = { expandedDiskFs.value = null }
                 )
             }
 
