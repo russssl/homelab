@@ -1,9 +1,11 @@
 package com.homelab.app.data.remote.dto.beszel
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
@@ -87,7 +89,12 @@ data class BeszelRecordStats(
     val dt: Double? = null,
     val ns: Double? = null,
     val nr: Double? = null,
-    val t: List<Double>? = null,
+    val t: JsonElement? = null,
+    val efs: Map<String, BeszelFsEntry>? = null,
+    val la: List<Double>? = null,
+    val ni: Map<String, List<Double>>? = null,
+    val dio: List<Double>? = null,
+    val bat: List<Double>? = null,
     val dc: List<BeszelContainer>? = null
 ) {
     val cpuValue: Double get() = cpu ?: 0.0
@@ -99,7 +106,41 @@ data class BeszelRecordStats(
     val dtValue: Double get() = dt ?: 0.0
     val nsValue: Double get() = ns ?: 0.0
     val nrValue: Double get() = nr ?: 0.0
+
+    val maxTempCelsius: Double?
+        get() = t
+            ?.jsonObject
+            ?.values
+            ?.mapNotNull { it.jsonPrimitive.doubleOrNull }
+            ?.maxOrNull()
+
+    val loadAvgValues: List<Double> get() = la ?: emptyList()
+
+    val netRxBytes: Double?
+        get() = ni?.values?.sumOf { it.getOrNull(2) ?: 0.0 }
+
+    val netTxBytes: Double?
+        get() = ni?.values?.sumOf { it.getOrNull(3) ?: 0.0 }
+
+    val diskReadIO: Double? get() = dio?.getOrNull(0)
+    val diskWriteIO: Double? get() = dio?.getOrNull(1)
+
+    val batteryLevel: Int?
+        get() = bat?.getOrNull(0)?.toInt()
+
+    val batteryMinutes: Int?
+        get() = bat?.getOrNull(1)?.toInt()
 }
+
+@Serializable
+data class BeszelFsEntry(
+    val d: Double? = null,
+    val du: Double? = null,
+    val r: Double? = null,
+    val w: Double? = null,
+    val rb: Double? = null,
+    val wb: Double? = null
+)
 
 @Serializable
 data class BeszelContainer(
@@ -132,4 +173,29 @@ data class BeszelUserRecord(
     val id: String,
     val email: String? = null,
     val username: String? = null
+)
+
+@Serializable
+data class BeszelSystemDetailsResponse(
+    val items: List<BeszelSystemDetails>,
+    val totalItems: Int? = null,
+    val page: Int? = null,
+    val perPage: Int? = null
+)
+
+@Serializable
+data class BeszelSystemDetails(
+    val id: String,
+    @SerialName("system") val systemId: String? = null,
+    val hostname: String? = null,
+    @SerialName("os_name") val osName: String? = null,
+    val os: Int? = null,
+    val kernel: String? = null,
+    val arch: String? = null,
+    val cores: Int? = null,
+    val threads: Int? = null,
+    val memory: Long? = null,
+    val cpu: String? = null,
+    val podman: Boolean? = null,
+    val updated: String? = null
 )

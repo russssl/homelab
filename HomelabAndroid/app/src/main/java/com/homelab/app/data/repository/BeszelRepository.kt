@@ -2,6 +2,7 @@ package com.homelab.app.data.repository
 
 import com.homelab.app.data.remote.api.BeszelApi
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
+import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetails
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,7 +37,13 @@ class BeszelRepository @Inject constructor(
         return api.getSystem(id = id)
     }
 
-    suspend fun getSystemRecords(systemId: String, limit: Int = 60): List<BeszelSystemRecord> {
+    suspend fun getSystemDetails(systemId: String): BeszelSystemDetails? {
+        val filter = "system='$systemId'"
+        val response = api.getSystemDetails(filter = filter, limit = 1)
+        return response.items.firstOrNull()
+    }
+
+    suspend fun getSystemRecords(systemId: String, limit: Int = 30): List<BeszelSystemRecord> {
         // Formattazione manuale del filter di Pocketbase
         val filter = "system='$systemId'"
         val response = api.getSystemRecords(filter = filter, limit = limit)

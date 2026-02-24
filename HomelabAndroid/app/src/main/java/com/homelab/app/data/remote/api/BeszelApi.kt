@@ -3,6 +3,7 @@ package com.homelab.app.data.remote.api
 import com.homelab.app.data.remote.dto.beszel.BeszelAuthResponse
 import com.homelab.app.data.remote.dto.beszel.BeszelRecordsResponse
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
+import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetailsResponse
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemsResponse
 import retrofit2.http.*
 
@@ -31,6 +32,13 @@ interface BeszelApi {
     suspend fun getSystemRecords(
         @Header("X-Homelab-Service") service: String = "Beszel",
         @Query("filter", encoded = true) filter: String,
-        @Query("perPage") limit: Int = 60
+        @Query("perPage") limit: Int = 30
     ): BeszelRecordsResponse
+
+    @GET("api/collections/system_details/records")
+    suspend fun getSystemDetails(
+        @Header("X-Homelab-Service") service: String = "Beszel",
+        @Query("filter", encoded = true) filter: String,
+        @Query("perPage") limit: Int = 1
+    ): BeszelSystemDetailsResponse
 }

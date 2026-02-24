@@ -3,6 +3,7 @@ package com.homelab.app.ui.beszel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
+import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetails
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
 import com.homelab.app.data.repository.BeszelRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +22,9 @@ class BeszelViewModel @Inject constructor(
 
     private val _selectedSystem = MutableStateFlow<BeszelSystem?>(null)
     val selectedSystem: StateFlow<BeszelSystem?> = _selectedSystem
+
+    private val _systemDetails = MutableStateFlow<BeszelSystemDetails?>(null)
+    val systemDetails: StateFlow<BeszelSystemDetails?> = _systemDetails
 
     private val _records = MutableStateFlow<List<BeszelSystemRecord>>(emptyList())
     val records: StateFlow<List<BeszelSystemRecord>> = _records
@@ -53,14 +57,25 @@ class BeszelViewModel @Inject constructor(
                 // Fetch basic system info first
                 val s = repository.getSystem(systemId)
                 _selectedSystem.value = s
-                
-                // Fetch records (non-critical, don't block if they fail)
-                try {
-                    val rawRecords = repository.getSystemRecords(systemId, limit = 60)
-                    // The API returns newest records first. Sort chronologically so graphs plot left to right natively.
-                    _records.value = rawRecords.sortedBy { it.created }
-                } catch (e: Exception) {
-                    // Log or ignore non-critical records failure
+
+                // Fire-and-forget: extended system details (non-critical)
+                launch {
+                    try {
+                        _systemDetails.value = repository.getSystemDetails(systemId)
+                    } catch (_: Exception) {
+                        // Ignore non-critical details failure
+                    }
+                }
+
+                // Fire-and-forget: records (non-critical)
+                launch {
+                    try {
+                        val rawRecords = repository.getSystemRecords(systemId)
+                        // The API returns newest records first. Sort chronologically so graphs plot left to right natively.
+                        _records.value = rawRecords.sortedBy { it.created }
+                    } catch (_: Exception) {
+                        // Ignore non-critical records failure
+                    }
                 }
             } catch (e: Exception) {
                 _error.value = e.localizedMessage ?: "Errore caricamento dettagli sistema"

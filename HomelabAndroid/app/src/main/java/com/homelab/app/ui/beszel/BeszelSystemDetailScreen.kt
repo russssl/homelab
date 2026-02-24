@@ -3,6 +3,8 @@ package com.homelab.app.ui.beszel
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,29 +20,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.homelab.app.util.ServiceType
-import com.homelab.app.ui.theme.isThemeDark
-import com.homelab.app.ui.theme.primaryColor
-import com.homelab.app.ui.theme.StatusGreen
-import com.homelab.app.ui.theme.StatusRed
-import com.homelab.app.ui.theme.StatusOrange
-import com.homelab.app.ui.theme.StatusBlue
-import com.homelab.app.ui.theme.StatusPurple
+import com.homelab.app.R
+import com.homelab.app.data.remote.dto.beszel.BeszelContainer
+import com.homelab.app.data.remote.dto.beszel.BeszelRecordStats
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
+import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetails
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemInfo
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
-import com.homelab.app.data.remote.dto.beszel.BeszelContainer
-import androidx.compose.ui.res.stringResource
-import com.homelab.app.R
+import com.homelab.app.ui.theme.StatusBlue
+import com.homelab.app.ui.theme.StatusGreen
+import com.homelab.app.ui.theme.StatusOrange
+import com.homelab.app.ui.theme.StatusPurple
+import com.homelab.app.ui.theme.StatusRed
+import com.homelab.app.ui.theme.isThemeDark
+import com.homelab.app.ui.theme.primaryColor
+import com.homelab.app.util.ServiceType
 import java.util.*
+import kotlin.math.roundToInt
+import android.graphics.Paint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +60,7 @@ fun BeszelSystemDetailScreen(
     viewModel: BeszelViewModel = hiltViewModel()
 ) {
     val system by viewModel.selectedSystem.collectAsStateWithLifecycle()
+    val systemDetails by viewModel.systemDetails.collectAsStateWithLifecycle()
     val records by viewModel.records.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
@@ -87,7 +98,15 @@ fun BeszelSystemDetailScreen(
         } else {
             val s = system!!
             val info = s.info
+            val details = systemDetails
             val latestStats = records.firstOrNull()?.stats
+            val statsHistory = records.map { it.stats }
+
+            val cpuHistory = records.takeLast(30).map { it.stats.cpuValue }
+            val memHistory = records.takeLast(30).map { it.stats.mpValue }
+
+            val expandedMetric = remember { mutableStateOf<ExtraMetricType?>(null) }
+            val expandedResourceMetric = remember { mutableStateOf<ResourceMetricType?>(null) }
 
             LazyColumn(
                 modifier = Modifier
@@ -97,20 +116,24 @@ fun BeszelSystemDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Header Card
-                item { HeaderCard(s) }
+                item { BeszelHeaderCard(s) }
+
+                if (info != null || details != null) {
+                    // System Info
+                    item { SystemInfoSection(info = info, details = details) }
+                }
 
                 if (info != null) {
-                    // System Info
-                    item { SystemInfoSection(info) }
-
                     // Resources
                     item {
                         ResourcesSection(
                             cpu = info.cpuValue,
                             mp = info.mpValue,
                             dp = info.dpValue,
-                            cpuHistory = records.takeLast(30).map { it.stats.cpuValue },
-                            memHistory = records.takeLast(30).map { it.stats.mpValue }
+                            cpuHistory = cpuHistory,
+                            memHistory = memHistory,
+                            onCpuClick = { expandedResourceMetric.value = ResourceMetricType.CPU },
+                            onMemClick = { expandedResourceMetric.value = ResourceMetricType.MEMORY }
                         )
                     }
 
@@ -120,16 +143,365 @@ fun BeszelSystemDetailScreen(
                         item { ContainersSection(containers) }
                     }
 
+                    // Extra metrics from latest stats
+                    if (latestStats != null) {
+                        item {
+                            ExtraMetricsSection(
+                                latest = latestStats,
+                                history = statsHistory,
+                                onMetricClick = { expandedMetric.value = it }
+                            )
+                        }
+                    }
+
                     // Uptime
                     item { UptimeCard(info.uValue) }
                 }
+            }
+
+            expandedMetric.value?.let { metric ->
+                ExtraMetricDetailsSheet(
+                    metric = metric,
+                    history = statsHistory,
+                    onDismiss = { expandedMetric.value = null }
+                )
+            }
+
+            expandedResourceMetric.value?.let { metric ->
+                val title: String
+                val data: List<Double>
+                val accent: Color
+                val formatter: (Double) -> String
+
+                when (metric) {
+                    ResourceMetricType.CPU -> {
+                        title = stringResource(R.string.beszel_cpu)
+                        data = cpuHistory
+                        accent = ServiceType.BESZEL.primaryColor
+                        formatter = { v: Double -> String.format("%.1f%%", v) }
+                    }
+                    ResourceMetricType.MEMORY -> {
+                        title = stringResource(R.string.beszel_memory)
+                        data = memHistory
+                        accent = StatusPurple
+                        formatter = { v: Double -> String.format("%.1f%%", v) }
+                    }
+                }
+                ResourceMetricDetailsSheet(
+                    title = title,
+                    data = data,
+                    accent = accent,
+                    unitFormatter = formatter,
+                    onDismiss = { expandedResourceMetric.value = null }
+                )
+            }
+
+        }
+    }
+}
+
+private enum class ExtraMetricType {
+    TEMPERATURE, LOAD, NETWORK, DISK, BATTERY
+}
+
+private enum class ResourceMetricType {
+    CPU, MEMORY
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExtraMetricDetailsSheet(
+    metric: ExtraMetricType,
+    history: List<BeszelRecordStats>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        val title = when (metric) {
+            ExtraMetricType.TEMPERATURE -> stringResource(R.string.beszel_temps)
+            ExtraMetricType.LOAD -> stringResource(R.string.beszel_load_avg)
+            ExtraMetricType.NETWORK -> stringResource(R.string.beszel_network_io)
+            ExtraMetricType.DISK -> stringResource(R.string.beszel_disk_io)
+            ExtraMetricType.BATTERY -> stringResource(R.string.beszel_battery)
+        }
+
+        val data: List<Double> = when (metric) {
+            ExtraMetricType.TEMPERATURE -> history.mapNotNull { it.maxTempCelsius }
+            ExtraMetricType.LOAD -> history.mapNotNull { it.loadAvgValues.firstOrNull() }
+            ExtraMetricType.NETWORK -> history.mapNotNull { it.netRxBytes }
+            ExtraMetricType.DISK -> history.mapNotNull { it.diskReadIO }
+            ExtraMetricType.BATTERY -> history.mapNotNull { it.batteryLevel?.toDouble() }
+        }
+
+        val accent = when (metric) {
+            ExtraMetricType.TEMPERATURE -> StatusOrange
+            ExtraMetricType.LOAD -> ServiceType.BESZEL.primaryColor
+            ExtraMetricType.NETWORK -> StatusPurple
+            ExtraMetricType.DISK -> StatusOrange
+            ExtraMetricType.BATTERY -> StatusGreen
+        }
+
+        val unitFormatter: (Double) -> String = when (metric) {
+            ExtraMetricType.TEMPERATURE -> { v -> String.format("%.1f°C", v) }
+            ExtraMetricType.LOAD -> { v -> String.format("%.2f", v) }
+            ExtraMetricType.NETWORK -> { v -> formatBytes(v) }
+            ExtraMetricType.DISK -> { v -> String.format("%.0f ops", v) }
+            ExtraMetricType.BATTERY -> { v -> String.format("%.0f%%", v) }
+        }
+
+        val min = data.minOrNull()
+        val max = data.maxOrNull()
+        val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+        val latest = data.lastOrNull()
+        val selectedIndex = remember { mutableStateOf<Int?>(null) }
+        val cursorValue = selectedIndex.value?.let { idx -> data.getOrNull(idx) }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+            if (data.size >= 2) {
+                // Compact stats row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val leftParts = buildList {
+                        min?.let { add("Min: ${unitFormatter(it)}") }
+                        avg?.let { add("Avg: ${unitFormatter(it)}") }
+                    }
+                    if (leftParts.isNotEmpty()) {
+                        Text(
+                            text = leftParts.joinToString("   "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = accent,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = unitFormatter
+                )
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ResourceMetricDetailsSheet(
+    title: String,
+    data: List<Double>,
+    accent: Color,
+    unitFormatter: (Double) -> String,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val selectedIndex = remember { mutableStateOf<Int?>(null) }
+    val cursorValue = selectedIndex.value?.let { idx -> data.getOrNull(idx) }
+    val min = data.minOrNull()
+    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+            if (data.size >= 2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val leftParts = buildList {
+                        min?.let { add("Min: ${unitFormatter(it)}") }
+                        avg?.let { add("Avg: ${unitFormatter(it)}") }
+                    }
+                    if (leftParts.isNotEmpty()) {
+                        Text(
+                            text = leftParts.joinToString("   "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = accent,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = unitFormatter
+                )
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DiskDetailsSheet(
+    latest: BeszelRecordStats?,
+    history: List<BeszelRecordStats>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val data = history.map { it.dpValue }
+    val selectedIndex = remember { mutableStateOf<Int?>(null) }
+    val unitFormatter: (Double) -> String = { v -> String.format("%.1f%%", v) }
+
+    val drives = latest?.efs?.entries.orEmpty()
+
+    // System/root disk (usually SSD)
+    val ssdUsed = latest?.dValue?.takeIf { it > 0.0 } ?: 0.0
+    val ssdTotal = latest?.dtValue?.takeIf { it > 0.0 } ?: 0.0
+    val ssdHasData = ssdTotal > 0.0
+
+    // Other drives (HDDs etc.)
+    val drivesUsed = drives.mapNotNull { it.value.du }.sum()
+    val drivesTotal = drives.mapNotNull { it.value.d }.sum()
+
+    val allUsed = ssdUsed + drivesUsed
+    val allTotal = ssdTotal + drivesTotal
+    val allPct = if (allTotal > 0.0) allUsed / allTotal * 100.0 else null
+    val allFree = if (allTotal > 0.0) (allTotal - allUsed).coerceAtLeast(0.0) else null
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.beszel_disk),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            // All drives summary (graph matches this)
+            if (allTotal > 0.0 && allPct != null) {
+                Text(
+                    text = "All drives: ${formatGB(allUsed)} / ${formatGB(allTotal)}  (${unitFormatter(allPct)})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                allFree?.let {
+                    Text(
+                        text = "Free: ${formatGB(it)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // System disk (SSD) detail, if available
+            if (ssdHasData) {
+                val ssdPct = if (ssdTotal > 0.0) ssdUsed / ssdTotal * 100.0 else null
+                val systemLine = buildString {
+                    append("System: ${formatGB(ssdUsed)} / ${formatGB(ssdTotal)}")
+                    ssdPct?.let { value ->
+                        val pctText = String.format(Locale.getDefault(), "%.1f%%", value)
+                        append("  ($pctText)")
+                    }
+                }
+                Text(
+                    text = systemLine,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (drives.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    drives.forEach { (name, fs) ->
+                        val totalDrive = fs.d ?: 0.0
+                        val usedDrive = fs.du ?: 0.0
+                        val pct = if (totalDrive > 0.0) (usedDrive / totalDrive * 100.0) else null
+                        val line = buildString {
+                            append("$name: ${formatGB(usedDrive)} / ${formatGB(totalDrive)}")
+                            pct?.let { value ->
+                                val pctText = String.format(Locale.getDefault(), "%.1f%%", value)
+                                append("  ($pctText)")
+                            }
+                        }
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            if (data.size >= 2) {
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = StatusOrange,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = unitFormatter
+                )
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
 @Composable
-private fun HeaderCard(system: BeszelSystem) {
+private fun BeszelHeaderCard(system: BeszelSystem) {
     val isUp = system.isOnline
     val statusColor = if (isUp) StatusGreen else StatusRed
 
@@ -186,7 +558,19 @@ private fun HeaderCard(system: BeszelSystem) {
 }
 
 @Composable
-private fun SystemInfoSection(info: BeszelSystemInfo) {
+private fun SystemInfoSection(info: BeszelSystemInfo?, details: BeszelSystemDetails?) {
+    if (info == null && details == null) return
+
+    val osText = details?.osName ?: info?.os
+    val kernelText = details?.kernel ?: info?.k
+    val hostnameText = details?.hostname ?: info?.h
+    val cpuText = details?.cpu ?: info?.cm
+    val coresValue = details?.cores ?: info?.c
+    val memoryDisplay = details?.memory?.let { bytes ->
+        val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+        formatGB(gb)
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader(icon = Icons.Default.Info, title = stringResource(R.string.beszel_info_title))
         
@@ -196,11 +580,43 @@ private fun SystemInfoSection(info: BeszelSystemInfo) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                info.os?.let { if (it.isNotEmpty()) InfoRow(stringResource(R.string.beszel_os), it) }
-                info.k?.let { if (it.isNotEmpty()) { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant); InfoRow(stringResource(R.string.beszel_kernel), it) } }
-                info.h?.let { if (it.isNotEmpty()) { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant); InfoRow(stringResource(R.string.beszel_hostname), it) } }
-                info.cm?.let { if (it.isNotEmpty()) { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant); InfoRow(stringResource(R.string.beszel_cpu), it) } }
-                info.c?.let { if (it > 0) { HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant); InfoRow(stringResource(R.string.beszel_cores), "$it") } }
+                osText?.let {
+                    if (it.isNotEmpty()) InfoRow(stringResource(R.string.beszel_os), it)
+                }
+                kernelText?.let {
+                    if (it.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        InfoRow(stringResource(R.string.beszel_kernel), it)
+                    }
+                }
+                hostnameText?.let {
+                    if (it.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        InfoRow(stringResource(R.string.beszel_hostname), it)
+                    }
+                }
+                cpuText?.let {
+                    if (it.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        InfoRow(stringResource(R.string.beszel_cpu), it)
+                    }
+                }
+                coresValue?.let {
+                    if (it > 0) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        InfoRow(stringResource(R.string.beszel_cores), "$it")
+                    }
+                }
+                memoryDisplay?.let {
+                    if (it.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        InfoRow(stringResource(R.string.beszel_memory), it)
+                    }
+                }
+                details?.podman?.let {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    InfoRow(stringResource(R.string.beszel_podman), if (it) "true" else "false")
+                }
             }
         }
     }
@@ -212,7 +628,9 @@ private fun ResourcesSection(
     mp: Double, 
     dp: Double, 
     cpuHistory: List<Double> = emptyList(),
-    memHistory: List<Double> = emptyList()
+    memHistory: List<Double> = emptyList(),
+    onCpuClick: () -> Unit = {},
+    onMemClick: () -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader(icon = Icons.Default.Layers, title = stringResource(R.string.beszel_resources_title))
@@ -222,7 +640,8 @@ private fun ResourcesSection(
             iconColor = ServiceType.BESZEL.primaryColor,
             title = stringResource(R.string.beszel_cpu),
             percent = cpu,
-            history = cpuHistory
+            history = cpuHistory,
+            onClick = onCpuClick
         )
 
         ResourceCard(
@@ -230,7 +649,8 @@ private fun ResourcesSection(
             iconColor = StatusPurple,
             title = stringResource(R.string.beszel_memory),
             percent = mp,
-            history = memHistory
+            history = memHistory,
+            onClick = onMemClick
         )
 
         ResourceCard(
@@ -243,6 +663,208 @@ private fun ResourcesSection(
 }
 
 @Composable
+private fun ExtraMetricsSection(
+    latest: BeszelRecordStats,
+    history: List<BeszelRecordStats>,
+    onMetricClick: (ExtraMetricType) -> Unit
+) {
+    val hasTemp = latest.maxTempCelsius != null
+    val hasLoad = latest.loadAvgValues.isNotEmpty()
+    val hasNet = latest.netRxBytes != null || latest.netTxBytes != null
+    val hasDisk = latest.diskReadIO != null || latest.diskWriteIO != null
+    val hasBattery = latest.batteryLevel != null
+
+    if (!hasTemp && !hasLoad && !hasNet && !hasDisk && !hasBattery) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader(icon = Icons.Default.Insights, title = stringResource(R.string.beszel_extra_title))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Row 1: Temp + Load (or single)
+                if (hasTemp || hasLoad) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (hasTemp) {
+                            val temp = latest.maxTempCelsius!!
+                            val tempColor = when {
+                                temp >= 80 -> StatusRed
+                                temp >= 65 -> StatusOrange
+                                else -> StatusGreen
+                            }
+                            ExtraMetricChip(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Thermostat,
+                                accentColor = tempColor,
+                                label = stringResource(R.string.beszel_temps),
+                                value = String.format("%.1f°C", temp),
+                                onClick = { onMetricClick(ExtraMetricType.TEMPERATURE) }
+                            )
+                        }
+                        if (hasLoad) {
+                            val loadValues = latest.loadAvgValues
+                            val loadText = when (loadValues.size) {
+                                0 -> ""
+                                1 -> String.format("%.2f", loadValues[0])
+                                2 -> String.format("%.2f / %.2f", loadValues[0], loadValues[1])
+                                else -> String.format("%.2f / %.2f / %.2f", loadValues[0], loadValues[1], loadValues[2])
+                            }
+                            ExtraMetricChip(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Timeline,
+                                accentColor = ServiceType.BESZEL.primaryColor,
+                                label = stringResource(R.string.beszel_load_avg),
+                                value = loadText,
+                                onClick = { onMetricClick(ExtraMetricType.LOAD) }
+                            )
+                        }
+                    }
+                }
+                // Row 2: Net + Disk (or single)
+                if (hasNet || hasDisk) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (hasNet) {
+                            val rx = latest.netRxBytes ?: 0.0
+                            val tx = latest.netTxBytes ?: 0.0
+                            ExtraMetricChip(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.NetworkCheck,
+                                accentColor = StatusPurple,
+                                label = stringResource(R.string.beszel_network_io),
+                                value = "↓ ${formatBytes(rx)}  ↑ ${formatBytes(tx)}",
+                                onClick = { onMetricClick(ExtraMetricType.NETWORK) }
+                            )
+                        }
+                        if (hasDisk) {
+                            val read = latest.diskReadIO ?: 0.0
+                            val write = latest.diskWriteIO ?: 0.0
+                            ExtraMetricChip(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Speed,
+                                accentColor = StatusOrange,
+                                label = stringResource(R.string.beszel_disk_io),
+                                value = "R ${read.toLong()}  W ${write.toLong()}",
+                                onClick = { onMetricClick(ExtraMetricType.DISK) }
+                            )
+                        }
+                    }
+                }
+                // Row 3: Battery (full width)
+                if (hasBattery) {
+                    val level = latest.batteryLevel ?: 0
+                    val minutes = latest.batteryMinutes
+                    val value = if (minutes != null && minutes > 0) "$level% · ${minutes}m" else "$level%"
+                    val batteryColor = when {
+                        level <= 15 -> StatusRed
+                        level <= 35 -> StatusOrange
+                        else -> StatusGreen
+                    }
+                    ExtraMetricChip(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Default.BatteryStd,
+                        accentColor = batteryColor,
+                        label = stringResource(R.string.beszel_battery),
+                        value = value,
+                        showProgress = true,
+                        progress = level / 100.0,
+                        onClick = { onMetricClick(ExtraMetricType.BATTERY) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtraMetricChip(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    accentColor: Color,
+    label: String,
+    value: String,
+    showProgress: Boolean = false,
+    progress: Double = 0.0,
+    onClick: () -> Unit = {}
+) {
+    val haptic = LocalHapticFeedback.current
+
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = accentColor.copy(alpha = 0.06f)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.clickable {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = accentColor.copy(alpha = 0.12f),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = accentColor.copy(alpha = 0.9f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (showProgress) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth((progress.coerceIn(0.0, 1.0)).toFloat())
+                            .background(accentColor, RoundedCornerShape(2.dp))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ResourceCard(
     icon: ImageVector,
     iconColor: Color,
@@ -250,7 +872,8 @@ private fun ResourceCard(
     percent: Double,
     detailLeft: String? = null,
     detailRight: String? = null,
-    history: List<Double> = emptyList()
+    history: List<Double> = emptyList(),
+    onClick: (() -> Unit)? = null
 ) {
     val progressColor = when {
         percent > 90 -> StatusRed
@@ -259,7 +882,9 @@ private fun ResourceCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
@@ -316,7 +941,14 @@ private fun ResourceCard(
 }
 
 @Composable
-private fun SmoothLineGraph(data: List<Double>, graphColor: Color) {
+private fun SmoothLineGraph(
+    data: List<Double>,
+    graphColor: Color,
+    enableScrub: Boolean = false,
+    selectedIndex: Int? = null,
+    onSelectedIndexChange: ((Int?) -> Unit)? = null,
+    labelFormatter: ((Double) -> String)? = null
+) {
     if (data.size < 2) return
     
     val maxVal = (data.maxOrNull() ?: 1.0).coerceAtLeast(1.0)
@@ -330,6 +962,8 @@ private fun SmoothLineGraph(data: List<Double>, graphColor: Color) {
         label = "graph_appear"
     )
 
+    val haptic = LocalHapticFeedback.current
+
     Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
         Spacer(modifier = Modifier.height(16.dp))
@@ -338,6 +972,34 @@ private fun SmoothLineGraph(data: List<Double>, graphColor: Color) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
+                .pointerInput(enableScrub, data.size) {
+                    if (!enableScrub || onSelectedIndexChange == null || data.isEmpty()) return@pointerInput
+                    var lastIndex: Int? = null
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val widthPx = size.width.toFloat().coerceAtLeast(1f)
+                            val fraction = (offset.x / widthPx).coerceIn(0f, 1f)
+                            val idx = ((fraction * (data.size - 1)).roundToInt()).coerceIn(0, data.size - 1)
+                            if (idx != lastIndex) {
+                                lastIndex = idx
+                                onSelectedIndexChange(idx)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            val widthPx = size.width.toFloat().coerceAtLeast(1f)
+                            val fraction = (change.position.x / widthPx).coerceIn(0f, 1f)
+                            val idx = ((fraction * (data.size - 1)).roundToInt()).coerceIn(0, data.size - 1)
+                            if (idx != lastIndex) {
+                                lastIndex = idx
+                                onSelectedIndexChange(idx)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        },
+                        onDragEnd = { },
+                        onDragCancel = { }
+                    )
+                }
         ) {
             val width = size.width
             val height = size.height
@@ -392,6 +1054,62 @@ private fun SmoothLineGraph(data: List<Double>, graphColor: Color) {
                     join = androidx.compose.ui.graphics.StrokeJoin.Round
                 )
             )
+
+            if (enableScrub && selectedIndex != null && selectedIndex in data.indices) {
+                val idx = selectedIndex.coerceIn(0, data.size - 1)
+                val x = idx * stepX
+                val y = height - ((data[idx] - minVal) / range * height).toFloat() * animationProgress
+
+                drawLine(
+                    color = Color.White.copy(alpha = 0.5f),
+                    start = androidx.compose.ui.geometry.Offset(x, 0f),
+                    end = androidx.compose.ui.geometry.Offset(x, height),
+                    strokeWidth = 1.dp.toPx()
+                )
+
+                drawCircle(
+                    color = graphColor,
+                    radius = 3.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(x, y)
+                )
+
+                labelFormatter?.let { format ->
+                    val text = format(data[idx])
+                    val textSizePx = 14.sp.toPx()
+                    val paddingX = 6.dp.toPx()
+                    val paddingY = 4.dp.toPx()
+
+                    val paint = Paint().apply {
+                        isAntiAlias = true
+                        color = android.graphics.Color.WHITE
+                        textSize = textSizePx
+                    }
+
+                    val textWidth = paint.measureText(text)
+                    val boxWidth = textWidth + paddingX * 2
+                    val boxHeight = textSizePx + paddingY * 2
+
+                    val rawX = x - boxWidth / 2f
+                    val rawY = y - 32.dp.toPx() - boxHeight
+                    val boxLeft = rawX.coerceIn(0f, width - boxWidth)
+                    val boxTop = rawY.coerceAtLeast(4.dp.toPx())
+                    val boxRight = boxLeft + boxWidth
+                    val boxBottom = boxTop + boxHeight
+
+                    // Background pill
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = 0.7f),
+                        topLeft = androidx.compose.ui.geometry.Offset(boxLeft, boxTop),
+                        size = androidx.compose.ui.geometry.Size(boxWidth, boxHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                    )
+
+                    // Text
+                    val textX = boxLeft + paddingX
+                    val textY = boxTop + paddingY + textSizePx * 0.85f
+                    drawContext.canvas.nativeCanvas.drawText(text, textX, textY, paint)
+                }
+            }
         }
     }
 }
