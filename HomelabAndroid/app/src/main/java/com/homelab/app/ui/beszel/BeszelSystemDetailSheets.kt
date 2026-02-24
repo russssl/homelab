@@ -1,0 +1,286 @@
+package com.homelab.app.ui.beszel
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.homelab.app.R
+import com.homelab.app.data.remote.dto.beszel.BeszelRecordStats
+import com.homelab.app.ui.theme.StatusGreen
+import com.homelab.app.ui.theme.StatusOrange
+import com.homelab.app.ui.theme.StatusPurple
+import com.homelab.app.ui.theme.primaryColor
+import com.homelab.app.util.ServiceType
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ExtraMetricDetailsSheet(
+    metric: ExtraMetricType,
+    history: List<BeszelRecordStats>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        val title = when (metric) {
+            ExtraMetricType.TEMPERATURE -> stringResource(R.string.beszel_temps)
+            ExtraMetricType.LOAD -> stringResource(R.string.beszel_load_avg)
+            ExtraMetricType.NETWORK -> stringResource(R.string.beszel_network_io)
+            ExtraMetricType.DISK -> stringResource(R.string.beszel_disk_io)
+            ExtraMetricType.BATTERY -> stringResource(R.string.beszel_battery)
+        }
+
+        val data: List<Double>
+        val secondaryData: List<Double>?
+
+        when (metric) {
+            ExtraMetricType.TEMPERATURE -> {
+                data = history.mapNotNull { it.maxTempCelsius }
+                secondaryData = null
+            }
+            ExtraMetricType.LOAD -> {
+                data = history.mapNotNull { it.loadAvgValues.firstOrNull() }
+                secondaryData = null
+            }
+            ExtraMetricType.NETWORK -> {
+                // ns/nr are Beszel's precomputed network send/receive rates (MB/s).
+                // Convert to bytes/s to reuse the generic formatter.
+                val rxSeries = history.mapNotNull { it.nr }.map { it * 1024 * 1024 }
+                val txSeries = history.mapNotNull { it.ns }.map { it * 1024 * 1024 }
+                data = rxSeries
+                secondaryData = if (rxSeries.size == txSeries.size) txSeries else null
+            }
+            ExtraMetricType.DISK -> {
+                data = history.mapNotNull { it.diskReadIO }
+                secondaryData = null
+            }
+            ExtraMetricType.BATTERY -> {
+                data = history.mapNotNull { it.batteryLevel?.toDouble() }
+                secondaryData = null
+            }
+        }
+
+        val accent = when (metric) {
+            ExtraMetricType.TEMPERATURE -> StatusOrange
+            ExtraMetricType.LOAD -> ServiceType.BESZEL.primaryColor
+            ExtraMetricType.NETWORK -> StatusPurple
+            ExtraMetricType.DISK -> StatusOrange
+            ExtraMetricType.BATTERY -> StatusGreen
+        }
+
+        val unitFormatter: (Double) -> String = when (metric) {
+            ExtraMetricType.TEMPERATURE -> { v -> String.format("%.1f°C", v) }
+            ExtraMetricType.LOAD -> { v -> String.format("%.2f", v) }
+            ExtraMetricType.NETWORK -> { v -> formatNetRateBytesPerSec(v) }
+            ExtraMetricType.DISK -> { v -> String.format("%.0f ops", v) }
+            ExtraMetricType.BATTERY -> { v -> String.format("%.0f%%", v) }
+        }
+
+        val valueLabel: String = when (metric) {
+            ExtraMetricType.TEMPERATURE -> stringResource(R.string.beszel_temps)
+            ExtraMetricType.LOAD -> stringResource(R.string.beszel_load_avg)
+            ExtraMetricType.NETWORK -> stringResource(R.string.beszel_network_io)
+            ExtraMetricType.DISK -> stringResource(R.string.beszel_disk_io)
+            ExtraMetricType.BATTERY -> stringResource(R.string.beszel_battery)
+        }
+
+        val min = data.minOrNull()
+        val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+        val selectedIndex = remember { mutableStateOf<Int?>(null) }
+
+        Column(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+            if (data.size >= 2) {
+                Row(
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val leftParts = buildList {
+                        min?.let { add("Min: ${unitFormatter(it)}") }
+                        avg?.let { add("Avg: ${unitFormatter(it)}") }
+                    }
+                    if (leftParts.isNotEmpty()) {
+                        Text(
+                            text = leftParts.joinToString("   "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                val primaryFormatterForGraph: (Double) -> String
+                val secondaryFormatterForGraph: ((Double) -> String)?
+
+                if (metric == ExtraMetricType.NETWORK && secondaryData != null) {
+                    primaryFormatterForGraph = { v -> "RX: ${unitFormatter(v)}" }
+                    secondaryFormatterForGraph = { v -> "TX: ${unitFormatter(v)}" }
+                } else {
+                    primaryFormatterForGraph = { v -> "$valueLabel: ${unitFormatter(v)}" }
+                    secondaryFormatterForGraph = null
+                }
+
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = accent,
+                    secondaryData = secondaryData,
+                    secondaryColor = StatusOrange,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = primaryFormatterForGraph,
+                    secondaryLabelFormatter = secondaryFormatterForGraph
+                )
+
+                if (metric == ExtraMetricType.NETWORK && secondaryData != null) {
+                    Row(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(accent, CircleShape)
+                            )
+                            Text(
+                                text = "Download",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(StatusOrange, CircleShape)
+                            )
+                            Text(
+                                text = "Upload",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ResourceMetricDetailsSheet(
+    title: String,
+    data: List<Double>,
+    accent: Color,
+    unitFormatter: (Double) -> String,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val selectedIndex = remember { mutableStateOf<Int?>(null) }
+    val min = data.minOrNull()
+    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+            if (data.size >= 2) {
+                Row(
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val leftParts = buildList {
+                        min?.let { add("Min: ${unitFormatter(it)}") }
+                        avg?.let { add("Avg: ${unitFormatter(it)}") }
+                    }
+                    if (leftParts.isNotEmpty()) {
+                        Text(
+                            text = leftParts.joinToString("   "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                val valueLabel = title
+
+                SmoothLineGraph(
+                    data = data,
+                    graphColor = accent,
+                    enableScrub = true,
+                    selectedIndex = selectedIndex.value,
+                    onSelectedIndexChange = { selectedIndex.value = it },
+                    labelFormatter = { v -> "$valueLabel: ${unitFormatter(v)}" }
+                )
+
+                Text(
+                    text = "Oldest \u2192 Latest",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.beszel_background_update_info),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
