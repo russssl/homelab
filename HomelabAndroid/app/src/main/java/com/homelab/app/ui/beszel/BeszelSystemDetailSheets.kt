@@ -339,6 +339,12 @@ internal fun GpuDetailsSheet(
                 accent = StatusPurple
                 formatter = { v: Double -> String.format("%.1f W", v) }
             }
+            GpuMetricType.VRAM -> {
+                title = stringResource(R.string.beszel_gpu_vram_label_full)
+                series = history.mapNotNull { it.gpuVramPercent }.takeLast(240)
+                accent = StatusOrange
+                formatter = { v: Double -> String.format("%.1f%%", v) }
+            }
         }
 
         Column(

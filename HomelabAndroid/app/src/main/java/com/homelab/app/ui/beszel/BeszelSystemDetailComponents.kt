@@ -581,20 +581,21 @@ internal fun GpuMetricsSection(
     latest: BeszelRecordStats,
     history: List<BeszelRecordStats>,
     onUsageClick: () -> Unit = {},
-    onPowerClick: () -> Unit = {}
+    onPowerClick: () -> Unit = {},
+    onVramClick: () -> Unit = {}
 ) {
     val gpu = latest.primaryGpu ?: return
-    val usageHistory = history.mapNotNull { it.gpuUsagePercent }
-    val powerHistory = history.mapNotNull { it.gpuPowerWatts }
 
     GpuMetricsCard(
         gpuName = gpu.n,
         latestUsage = gpu.u ?: 0.0,
         latestPowerWatts = gpu.p ?: 0.0,
-        usageHistory = usageHistory,
-        powerHistory = powerHistory,
+        latestVramPercent = latest.gpuVramPercent ?: 0.0,
+        latestVramUsedMb = gpu.memUsedMb.takeIf { gpu.mt != null && gpu.mt > 0.0 },
+        latestVramTotalMb = gpu.memTotalMb.takeIf { gpu.mt != null && gpu.mt > 0.0 },
         onUsageClick = onUsageClick,
-        onPowerClick = onPowerClick
+        onPowerClick = onPowerClick,
+        onVramClick = onVramClick
     )
 }
 
@@ -603,13 +604,16 @@ private fun GpuMetricsCard(
     gpuName: String,
     latestUsage: Double,
     latestPowerWatts: Double,
-    usageHistory: List<Double>,
-    powerHistory: List<Double>,
+    latestVramPercent: Double,
+    latestVramUsedMb: Double?,
+    latestVramTotalMb: Double?,
     onUsageClick: () -> Unit = {},
-    onPowerClick: () -> Unit = {}
+    onPowerClick: () -> Unit = {},
+    onVramClick: () -> Unit = {}
 ) {
     val accentUsage = ServiceType.BESZEL.primaryColor
     val accentPower = StatusPurple
+    val accentVram = StatusOrange
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -651,61 +655,55 @@ private fun GpuMetricsCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
 
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = String.format("%.1f%%", latestUsage),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = accentUsage
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val usageLabel = stringResource(R.string.beszel_gpu_usage_label_full)
+            val vramLabel = stringResource(R.string.beszel_gpu_vram_label_full)
+            val powerLabel = stringResource(R.string.beszel_gpu_power_label_full)
+
+            val usageText = String.format("%.1f%%", latestUsage)
+            val vramText = if (latestVramTotalMb != null && latestVramUsedMb != null && latestVramTotalMb > 0.0) {
+                val pct = latestVramPercent.coerceIn(0.0, 100.0)
+                "${String.format("%.1f%%", pct)} • ${formatMB(latestVramUsedMb)} / ${formatMB(latestVramTotalMb)}"
+            } else {
+                stringResource(R.string.not_available)
+            }
+            val powerText = String.format("%.1f W", latestPowerWatts)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ExtraMetricChip(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Memory,
+                    accentColor = accentUsage,
+                    label = usageLabel,
+                    value = usageText,
+                    onClick = onUsageClick
+                )
+                if (latestVramTotalMb != null && latestVramUsedMb != null && latestVramTotalMb > 0.0) {
+                    ExtraMetricChip(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.Memory,
+                        accentColor = accentVram,
+                        label = vramLabel,
+                        value = vramText,
+                        onClick = onVramClick
                     )
-                    Text(
-                        text = String.format("%.1f W", latestPowerWatts),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accentPower
-                    )
                 }
             }
 
-            val condensedUsage = usageHistory.takeLast(60)
-            val condensedPower = powerHistory.takeLast(60)
-
-            if (condensedUsage.size >= 2) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onUsageClick)
-                    ) {
-                        SmoothLineGraph(
-                            data = condensedUsage,
-                            graphColor = accentUsage,
-                            enableScrub = false,
-                            labelFormatter = { v -> String.format("%.0f%%", v) }
-                        )
-                    }
-                }
-            }
-
-            if (condensedPower.size >= 2) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onPowerClick)
-                    ) {
-                        SmoothLineGraph(
-                            data = condensedPower,
-                            graphColor = accentPower,
-                            enableScrub = false,
-                            labelFormatter = { v -> String.format("%.1f W", v) }
-                        )
-                    }
-                }
-            }
+            ExtraMetricChip(
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Default.Speed,
+                accentColor = accentPower,
+                label = powerLabel,
+                value = powerText,
+                onClick = onPowerClick
+            )
         }
     }
 }

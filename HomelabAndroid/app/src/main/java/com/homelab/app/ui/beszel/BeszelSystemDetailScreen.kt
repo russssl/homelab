@@ -155,7 +155,8 @@ fun BeszelSystemDetailScreen(
                                 latest = latestStats,
                                 history = statsHistory,
                                 onUsageClick = { gpuDetailsMetric.value = GpuMetricType.USAGE },
-                                onPowerClick = { gpuDetailsMetric.value = GpuMetricType.POWER }
+                                onPowerClick = { gpuDetailsMetric.value = GpuMetricType.POWER },
+                                onVramClick = { gpuDetailsMetric.value = GpuMetricType.VRAM }
                             )
                         }
                         item {

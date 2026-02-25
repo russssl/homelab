@@ -149,14 +149,35 @@ data class BeszelRecordStats(
 
     val gpuPowerWatts: Double?
         get() = primaryGpu?.p
+
+    val gpuVramPercent: Double?
+        get() = primaryGpu?.memUsagePercent
+
+    val gpuVramUsedMb: Double?
+        get() = primaryGpu?.mu
+
+    val gpuVramTotalMb: Double?
+        get() = primaryGpu?.mt
 }
 
 @Serializable
 data class BeszelGpuEntry(
     val n: String,
     val u: Double? = null,
-    val p: Double? = null
-)
+    val p: Double? = null,
+    val mu: Double? = null,
+    val mt: Double? = null
+) {
+    val memUsedMb: Double get() = mu ?: 0.0
+    val memTotalMb: Double get() = mt ?: 0.0
+
+    val memUsagePercent: Double?
+        get() = if (mt != null && mt > 0.0 && mu != null) {
+            (mu / mt * 100.0).coerceIn(0.0, 100.0)
+        } else {
+            null
+        }
+}
 
 @Serializable
 data class BeszelFsEntry(

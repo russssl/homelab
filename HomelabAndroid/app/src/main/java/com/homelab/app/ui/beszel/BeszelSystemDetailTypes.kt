@@ -9,7 +9,7 @@ internal enum class ResourceMetricType {
 }
 
 internal enum class GpuMetricType {
-    USAGE, POWER
+    USAGE, POWER, VRAM
 }
 
 internal data class BandwidthPoint(

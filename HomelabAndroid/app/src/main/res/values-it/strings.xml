@@ -92,6 +92,7 @@
     <string name="beszel_gpu_power_label">Potenza (W)</string>
     <string name="beszel_gpu_usage_label_full">Utilizzo GPU</string>
     <string name="beszel_gpu_power_label_full">Potenza GPU</string>
+    <string name="beszel_gpu_vram_label_full">VRAM GPU</string>
     <string name="beszel_network">RETE</string>
     <string name="beszel_uptime">UPTIME</string>
     <string name="beszel_system_details">Dettagli Sistema</string>
@@ -179,3 +180,4 @@
     <string name="portainer_cpu_usage">Utilizzo CPU</string>
     <string name="portainer_memory_percent">Memoria %%</string>
 </resources>
+
