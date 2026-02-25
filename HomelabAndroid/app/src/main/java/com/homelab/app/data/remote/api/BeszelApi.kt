@@ -19,9 +19,13 @@ interface BeszelApi {
         @Body credentials: Map<String, String>
     ): BeszelAuthResponse
 
-    @GET("api/collections/systems/records?sort=-updated&perPage=50")
+    @GET("api/collections/systems/records")
     suspend fun getSystems(
-        @Header("X-Homelab-Service") service: String = "Beszel"
+        @Header("X-Homelab-Service") service: String = "Beszel",
+        @Query("sort") sort: String = "-updated",
+        @Query("perPage") perPage: Int = 50,
+        // Only fetch fields needed for the dashboard: identity + CPU/memory + disk (root + extra filesystems).
+        @Query("fields") fields: String = "id,name,host,status,info.cpu,info.mp,info.dp,info.efs"
     ): BeszelSystemsResponse
 
     @GET("api/collections/systems/records/{id}")
@@ -50,10 +54,4 @@ interface BeszelApi {
         @Query("filter", encoded = true) filter: String,
         @Query("perPage") limit: Int = 10
     ): BeszelSmartDevicesResponse
-
-    @GET("api/collections/smart_devices/records/{id}")
-    suspend fun getSmartDevice(
-        @Header("X-Homelab-Service") service: String = "Beszel",
-        @Path("id") id: String
-    ): BeszelSmartDevice
 }

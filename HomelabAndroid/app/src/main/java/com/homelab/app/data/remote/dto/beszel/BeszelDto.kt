@@ -42,7 +42,9 @@ data class BeszelSystemInfo(
     val k: String? = null,
     val h: String? = null,
     val t: Double? = null,
-    val c: Int? = null
+    val c: Int? = null,
+    // For /systems: aggregated filesystem percentages per extra drive (e.g. "drive_1": 71.8)
+    val efs: Map<String, Double?>? = null
 ) {
     val cpuValue: Double get() = cpu ?: 0.0
     val mpValue: Double get() = mp ?: 0.0
@@ -55,6 +57,15 @@ data class BeszelSystemInfo(
     val nsValue: Double get() = ns ?: 0.0
     val nrValue: Double get() = nr ?: 0.0
     val uValue: Double get() = u ?: 0.0
+
+    // Overall disk usage for the dashboard card.
+    // The API only exposes per-drive percentages (root `dp` + optional `efs`),
+    // without capacities, so a truly correct global percentage is impossible.
+    // To avoid misleading values, we surface just the root disk percentage.
+    val overallDiskPercent: Double
+        get() {
+            return dpValue.coerceIn(0.0, 100.0)
+        }
 }
 
 @Serializable

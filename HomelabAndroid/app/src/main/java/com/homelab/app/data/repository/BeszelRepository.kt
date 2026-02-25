@@ -31,7 +31,10 @@ class BeszelRepository @Inject constructor(
 
     suspend fun getSystems(): List<BeszelSystem> {
         val response = api.getSystems()
-        return response.items
+        // Keep a stable, predictable ordering on the dashboard.
+        // Sort by name (case-insensitive) so items don't jump around
+        // when their "updated" timestamp changes.
+        return response.items.sortedBy { it.name.lowercase() }
     }
 
     suspend fun getSystem(id: String): BeszelSystem {
