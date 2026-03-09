@@ -84,6 +84,26 @@
     <string name="pihole_top_queries">DOMAINES LES PLUS SOLLICITÉS</string>
     <string name="pihole_top_clients">CLIENTS LES PLUS ACTIFS</string>
     <string name="pihole_total_suffix">%s au total</string>
+    <string name="pihole_domain_management">Gestion des Domaines</string>
+    <string name="pihole_allowed">Autorisés</string>
+    <string name="pihole_blocked_list">Bloqués</string>
+    <string name="pihole_add_domain">Ajouter un Domaine</string>
+    <string name="pihole_no_domains">Aucun domaine trouvé</string>
+    <string name="pihole_add_domain_desc">Ajoutez un nouveau domaine à la liste %s.</string>
+    <string name="pihole_disable_permanently">Désactiver indéfiniment</string>
+    <string name="pihole_disable_1m">Désactiver pendant 1 minute</string>
+    <string name="pihole_disable_5m">Désactiver pendant 5 minutes</string>
+    <string name="pihole_disable_1h">Désactiver pendant 1 heure</string>
+    <string name="pihole_disable_custom">Minuteur personnalisé…</string>
+    <string name="pihole_custom_disable_title">Minuteur personnalisé</string>
+    <string name="pihole_custom_disable_desc">Définissez une durée personnalisée en minutes.</string>
+    <string name="pihole_custom_disable_minutes">Minutes</string>
+    <string name="pihole_query_log">Journal des requêtes</string>
+    <string name="pihole_filter_search">Filtrer domaine ou client</string>
+    <string name="pihole_filter_blocked">Bloquées</string>
+    <string name="pihole_filter_allowed">Autorisées</string>
+    <string name="pihole_filter_client">Client : %s</string>
+    <string name="pihole_no_query_results">Aucune requête ne correspond aux filtres actuels</string>
     
     <!-- Beszel -->
     <string name="beszel_cpu">CPU</string>
@@ -130,8 +150,16 @@
     <string name="gitea_file_too_large">Fichier trop volumineux pour l\'aperçu.</string>
     <string name="gitea_image_decode_error">Erreur lors du décodage de l\'image.</string>
     <string name="gitea_date_today">aujourd\'hui</string>
+    <string name="gitea_date_hours_ago">il y a %d h</string>
     <string name="gitea_date_days_ago">il y a %d j</string>
     <string name="gitea_date_months_ago">il y a %d m</string>
+    
+    <string name="unit_gb">Go</string>
+    <string name="unit_mb">Mo</string>
+    <string name="unit_kb">Ko</string>
+    <string name="unit_days">j</string>
+    <string name="unit_hours">h</string>
+    <string name="unit_minutes">min</string>
 
     <!-- Portainer -->
     <string name="portainer_endpoints">Terminaux</string>

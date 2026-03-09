@@ -17,6 +17,10 @@ secrets.json
 
 # IDE / Editor
 .claude/
+.idea/
+.gradle/
+.kotlin/
+*.iml
 
 # Logs
 *.log
@@ -31,6 +35,10 @@ HomelabSwift/**/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 HomelabSwift/**/*.xcodeproj/xcuserdata/
 HomelabSwift/**/*.xcodeproj/project.xcworkspace/xcuserdata/
 HomelabSwift/**/*.xcresult/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
 *.hmap
 *.dSYM.zip
 *.dSYM

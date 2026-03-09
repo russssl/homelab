@@ -251,8 +251,16 @@ struct ServiceLoginView: View {
             return ServiceConnection(type: .portainer, url: url, apiKey: apiKey.trimmingCharacters(in: .whitespaces))
 
         case .pihole:
-            let sid = try await servicesStore.piholeClient.authenticate(url: url, password: password)
-            return ServiceConnection(type: .pihole, url: url, token: sid)
+            let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
+            let sid = try await servicesStore.piholeClient.authenticate(url: url, password: trimmedPassword)
+            let authMode: PiHoleAuthMode = sid == trimmedPassword ? .legacy : .session
+            return ServiceConnection(
+                type: .pihole,
+                url: url,
+                token: sid,
+                piholePassword: trimmedPassword,
+                piholeAuthMode: authMode
+            )
 
         case .beszel:
             let token = try await servicesStore.beszelClient.authenticate(url: url, email: username.trimmingCharacters(in: .whitespaces), password: password)

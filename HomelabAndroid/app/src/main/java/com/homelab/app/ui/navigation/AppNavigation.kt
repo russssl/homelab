@@ -196,12 +196,19 @@ fun AppNavigation() {
             composable("pihole/dashboard") {
                 com.homelab.app.ui.pihole.PiholeDashboardScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onNavigateToDomains = { navController.navigate("pihole/domains") }
+                    onNavigateToDomains = { navController.navigate("pihole/domains") },
+                    onNavigateToQueryLog = { navController.navigate("pihole/queries") }
                 )
             }
 
             composable("pihole/domains") {
                 com.homelab.app.ui.pihole.PiholeDomainListScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("pihole/queries") {
+                com.homelab.app.ui.pihole.PiholeQueryLogScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

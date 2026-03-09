@@ -40,6 +40,9 @@ import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
 import com.homelab.app.data.remote.dto.beszel.BeszelContainer
 import androidx.compose.ui.res.stringResource
 import com.homelab.app.R
+import com.homelab.app.util.ResourceFormatters
+import com.homelab.app.util.UiState
+import com.homelab.app.ui.common.ErrorScreen
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,11 +52,11 @@ fun BeszelSystemDetailScreen(
     onNavigateBack: () -> Unit,
     viewModel: BeszelViewModel = hiltViewModel()
 ) {
-    val system by viewModel.selectedSystem.collectAsStateWithLifecycle()
+    val systemDetailState by viewModel.systemDetailState.collectAsStateWithLifecycle()
     val records by viewModel.records.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val error by viewModel.error.collectAsStateWithLifecycle()
     
+    val systemName = (systemDetailState as? UiState.Success)?.data?.name ?: stringResource(R.string.beszel_system_details)
+
     LaunchedEffect(systemId) {
         viewModel.fetchSystemDetail(systemId)
     }
@@ -61,7 +64,7 @@ fun BeszelSystemDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(system?.name ?: stringResource(R.string.beszel_system_details), fontWeight = FontWeight.Bold) },
+                title = { Text(systemName, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -76,52 +79,66 @@ fun BeszelSystemDetailScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        if (isLoading && system == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ServiceType.BESZEL.primaryColor)
+        when (val state = systemDetailState) {
+            is UiState.Loading, is UiState.Idle -> {
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ServiceType.BESZEL.primaryColor)
+                }
             }
-        } else if (system == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                Text(error ?: stringResource(R.string.beszel_system_not_found), color = MaterialTheme.colorScheme.error)
+            is UiState.Error -> {
+                ErrorScreen(
+                    message = state.message,
+                    onRetry = { viewModel.fetchSystemDetail(systemId) },
+                    modifier = Modifier.padding(paddingValues)
+                )
             }
-        } else {
-            val s = system!!
-            val info = s.info
-            val latestStats = records.firstOrNull()?.stats
+            is UiState.Offline -> {
+                ErrorScreen(
+                    message = "",
+                    onRetry = { viewModel.fetchSystemDetail(systemId) },
+                    isOffline = true,
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+            is UiState.Success -> {
+                val s = state.data
+                val info = s.info
+                val latestStats = records.firstOrNull()?.stats
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header Card
-                item { HeaderCard(s) }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header Card
+                    item { HeaderCard(s) }
 
-                if (info != null) {
-                    // System Info
-                    item { SystemInfoSection(info) }
+                    if (info != null) {
+                        // System Info
+                        item { SystemInfoSection(info) }
 
-                    // Resources
-                    item {
-                        ResourcesSection(
-                            cpu = info.cpuValue,
-                            mp = info.mpValue,
-                            dp = info.dpValue,
-                            cpuHistory = records.takeLast(30).map { it.stats.cpuValue },
-                            memHistory = records.takeLast(30).map { it.stats.mpValue }
-                        )
+                        // Resources
+                        item {
+                            ResourcesSection(
+                                cpu = info.cpuValue,
+                                mp = info.mpValue,
+                                dp = info.dpValue,
+                                cpuHistory = records.takeLast(30).map { it.stats.cpuValue },
+                                memHistory = records.takeLast(30).map { it.stats.mpValue }
+                            )
+                        }
+
+                        // Containers
+                        val containers = latestStats?.dc ?: emptyList()
+                        if (containers.isNotEmpty()) {
+                            item { ContainersSection(containers) }
+                        }
+
+                        // Uptime
+                        item { UptimeCard(info.uValue) }
                     }
-
-                    // Containers
-                    val containers = latestStats?.dc ?: emptyList()
-                    if (containers.isNotEmpty()) {
-                        item { ContainersSection(containers) }
-                    }
-
-                    // Uptime
-                    item { UptimeCard(info.uValue) }
                 }
             }
         }
@@ -428,8 +445,9 @@ private fun ContainersSection(containers: List<BeszelContainer>) {
                         Text(container.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
 
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            val context = LocalContext.current
                             ContainerStat(icon = Icons.Default.Memory, value = String.format("%.1f%%", container.cpuValue))
-                            ContainerStat(icon = Icons.Default.Dns, value = formatMB(container.mValue))
+                            ContainerStat(icon = Icons.Default.Dns, value = ResourceFormatters.formatMB(container.mValue, context))
                         }
                     }
                     if (index < containers.size - 1) {
@@ -464,7 +482,7 @@ private fun UptimeCard(seconds: Double) {
             Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Column {
                 Text(stringResource(R.string.beszel_uptime), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(formatUptimeHours(seconds), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(ResourceFormatters.formatUptimeHours(seconds, LocalContext.current), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -497,42 +515,4 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-// --- Formatters ---
-
-private fun formatMB(valMB: Double): String {
-    if (valMB == 0.0) return "0 MB"
-    if (valMB > 10_000_000) return formatBytes(valMB)
-    val gb = valMB / 1024.0
-    if (gb >= 1.0) return String.format("%.2f GB", gb)
-    return String.format("%.0f MB", valMB)
-}
-
-private fun formatGB(valGB: Double): String {
-    if (valGB == 0.0) return "0 GB"
-    if (valGB > 10_000_000) return formatBytes(valGB)
-    if (valGB >= 1000.0) return String.format("%.2f TB", valGB / 1000.0)
-    if (valGB >= 1.0) return String.format("%.1f GB", valGB)
-    return String.format("%.0f MB", valGB * 1024)
-}
-
-private fun formatBytes(bytes: Double): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(bytes) / Math.log10(1024.0)).toInt()
-    return String.format("%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
-}
-
-private fun formatNetRate(valBytesPerSec: Double): String {
-    if (valBytesPerSec == 0.0) return "0 B/s"
-    return "${formatBytes(valBytesPerSec)}/s"
-}
-
-private fun formatUptimeHours(seconds: Double): String {
-    val d = (seconds / 86400).toInt()
-    val h = (seconds % 86400 / 3600).toInt()
-    if (d > 0) return "${d}d ${h}h"
-    val m = (seconds % 3600 / 60).toInt()
-    if (h > 0) return "${h}h ${m}m"
-    return "${m}m"
-}
-
+// --- Formatters moved to ResourceFormatters ---

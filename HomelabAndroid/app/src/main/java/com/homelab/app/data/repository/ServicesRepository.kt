@@ -59,7 +59,10 @@ class ServicesRepository @Inject constructor(
         // Use a real GET request on IO dispatcher to avoid blocking main thread
         // Some local servers (like Pi-hole) might handle HEAD differently or fail.
         val reachable = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val baseUrl = connection.url.trimEnd('/')
+            val baseUrl = connection.url
+                .takeIf { it.isNotBlank() }
+                ?.trimEnd('/')
+                ?: return@withContext false
             val pathsToTry = if (type == ServiceType.PIHOLE) {
                 // For Pi-hole, try v6 info path, v5 admin path, and base URL
                 listOf("/api/info/version", "/admin/index.php", "", "/admin/api.php")
@@ -101,7 +104,8 @@ class ServicesRepository @Inject constructor(
                 val addresses = networkInterface.inetAddresses
                 while (addresses.hasMoreElements()) {
                     val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address.hostAddress.startsWith("100.")) {
+                    val hostAddress = address.hostAddress ?: continue
+                    if (!address.isLoopbackAddress && hostAddress.startsWith("100.")) {
                         found = true
                         break
                     }

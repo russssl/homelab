@@ -6,10 +6,8 @@ import com.homelab.app.data.remote.dto.pihole.PiholeBlockingStatus
 import com.homelab.app.data.remote.dto.pihole.PiholeQueryHistory
 import com.homelab.app.data.remote.dto.pihole.PiholeStats
 import com.homelab.app.data.remote.dto.pihole.PiholeUpstream
-import com.homelab.app.data.remote.dto.pihole.PiholeDomainListResponse
 import com.homelab.app.data.remote.dto.pihole.PiholeAddDomainRequest
 import kotlinx.serialization.json.JsonElement
-import okhttp3.ResponseBody
 import retrofit2.http.*
 
 interface PiholeApi {
@@ -21,6 +19,13 @@ interface PiholeApi {
         @Header("X-Homelab-Bypass") bypass: String = "true",
         @Body credentials: Map<String, String>
     ): PiholeAuthResponse
+
+    @GET
+    suspend fun validateLegacyAuth(
+        @Url url: String,
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Bypass") bypass: String = "true"
+    ): JsonElement
 
     @GET("api/stats/summary")
     suspend fun getStats(
@@ -43,10 +48,17 @@ interface PiholeApi {
 
     // Domains (v6 API)
     @GET("api/domains")
-    suspend fun getDomains(
+    suspend fun getDomainsRaw(
         @Header("X-Homelab-Service") service: String = "Pihole",
         @Query("auth") auth: String? = null
-    ): PiholeDomainListResponse
+    ): JsonElement
+
+    @GET("admin/api.php")
+    suspend fun getDomainsLegacy(
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Query("list") list: String = "all",
+        @Query("auth") auth: String? = null
+    ): JsonElement
 
     @POST("api/domains/{list}/exact")
     suspend fun addDomain(
@@ -56,6 +68,14 @@ interface PiholeApi {
         @Body request: PiholeAddDomainRequest
     )
 
+    @GET("admin/api.php")
+    suspend fun addDomainLegacy(
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Query("list") list: String,
+        @Query("add") domain: String,
+        @Query("auth") auth: String? = null
+    ): JsonElement
+
     @DELETE("api/domains/{list}/exact/{domain}")
     suspend fun removeDomain(
         @Path("list") list: String,
@@ -63,6 +83,14 @@ interface PiholeApi {
         @Header("X-Homelab-Service") service: String = "Pihole",
         @Query("auth") auth: String? = null
     )
+
+    @GET("admin/api.php")
+    suspend fun removeDomainLegacy(
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Query("list") list: String,
+        @Query("sub") domain: String,
+        @Query("auth") auth: String? = null
+    ): JsonElement
 
     // Pi-Hole APIs return dynamic formats (arrays vs objects based on version v5/v6)
     // We return JsonElement and parse it manually in Repository exactly as iOS does.
@@ -114,6 +142,23 @@ interface PiholeApi {
         @Header("X-Homelab-Service") service: String = "Pihole",
         @Query("auth") auth: String? = null
     ): PiholeQueryHistory
+
+    @GET("api/queries")
+    suspend fun getQueries(
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Query("auth") auth: String? = null,
+        @Query("from") from: Long,
+        @Query("until") until: Long
+    ): JsonElement
+
+    @GET("admin/api.php")
+    suspend fun getQueriesLegacy(
+        @Header("X-Homelab-Service") service: String = "Pihole",
+        @Query("getAllQueriesRaw") getAllQueriesRaw: Int = 1,
+        @Query("from") from: Long,
+        @Query("until") until: Long,
+        @Query("auth") auth: String? = null
+    ): JsonElement
 
     @GET("api/stats/upstreams")
     suspend fun getUpstreams(

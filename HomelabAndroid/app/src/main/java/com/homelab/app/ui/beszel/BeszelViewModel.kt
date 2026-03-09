@@ -5,54 +5,59 @@ import androidx.lifecycle.viewModelScope
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
 import com.homelab.app.data.repository.BeszelRepository
+import com.homelab.app.util.ErrorHandler
+import com.homelab.app.util.Logger
+import com.homelab.app.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
 
 @HiltViewModel
 class BeszelViewModel @Inject constructor(
-    private val repository: BeszelRepository
+    private val repository: BeszelRepository,
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    private val _systems = MutableStateFlow<List<BeszelSystem>>(emptyList())
-    val systems: StateFlow<List<BeszelSystem>> = _systems
+    private val _systemsState = MutableStateFlow<UiState<List<BeszelSystem>>>(UiState.Loading)
+    val systemsState: StateFlow<UiState<List<BeszelSystem>>> = _systemsState
 
-    private val _selectedSystem = MutableStateFlow<BeszelSystem?>(null)
-    val selectedSystem: StateFlow<BeszelSystem?> = _selectedSystem
+    private val _systemDetailState = MutableStateFlow<UiState<BeszelSystem>>(UiState.Loading)
+    val systemDetailState: StateFlow<UiState<BeszelSystem>> = _systemDetailState
 
     private val _records = MutableStateFlow<List<BeszelSystemRecord>>(emptyList())
     val records: StateFlow<List<BeszelSystemRecord>> = _records
 
-    private val _isLoading = MutableStateFlow(true)
-    val isLoading: StateFlow<Boolean> = _isLoading
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+    init {
+        _systemsState.onEach { Logger.stateTransition("BeszelViewModel", "systemsState", it) }.launchIn(viewModelScope)
+        _systemDetailState.onEach { Logger.stateTransition("BeszelViewModel", "systemDetailState", it) }.launchIn(viewModelScope)
+    }
 
     fun fetchSystems() {
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
+            _systemsState.value = UiState.Loading
             try {
-                _systems.value = repository.getSystems()
+                val systems = repository.getSystems()
+                _systemsState.value = UiState.Success(systems)
             } catch (e: Exception) {
-                _error.value = e.localizedMessage ?: "Errore caricamento server Beszel"
-            } finally {
-                _isLoading.value = false
+                val message = ErrorHandler.getMessage(context, e)
+                _systemsState.value = UiState.Error(message, retryAction = { fetchSystems() })
             }
         }
     }
 
     fun fetchSystemDetail(systemId: String) {
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
+            _systemDetailState.value = UiState.Loading
             try {
                 // Fetch basic system info first
                 val s = repository.getSystem(systemId)
-                _selectedSystem.value = s
+                _systemDetailState.value = UiState.Success(s)
                 
                 // Fetch records (non-critical, don't block if they fail)
                 try {
@@ -63,14 +68,9 @@ class BeszelViewModel @Inject constructor(
                     // Log or ignore non-critical records failure
                 }
             } catch (e: Exception) {
-                _error.value = e.localizedMessage ?: "Errore caricamento dettagli sistema"
-            } finally {
-                _isLoading.value = false
+                val message = ErrorHandler.getMessage(context, e)
+                _systemDetailState.value = UiState.Error(message, retryAction = { fetchSystemDetail(systemId) })
             }
         }
-    }
-
-    fun clearError() {
-        _error.value = null
     }
 }

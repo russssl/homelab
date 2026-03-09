@@ -17,6 +17,7 @@ struct Translations {
     let no: String
     let noData: String
     let retry: String
+    let notAvailable: String
 
     // Tabs
     let tabHome: String
@@ -98,6 +99,8 @@ struct Translations {
     let portainerStacks: String
     let portainerHealthy: String
     let portainerUnhealthy: String
+    let portainerHealthStatus: String
+    let portainerHost: String
 
     // Containers
     let containersSearch: String
@@ -113,8 +116,8 @@ struct Translations {
     let actionRestart: String
     let actionPause: String
     let actionResume: String
-    let actionRemove: String
     let actionKill: String
+    let actionRemove: String
     let actionConfirm: String
     let actionConfirmMessage: String
     let actionRemoveConfirm: String
@@ -191,6 +194,17 @@ struct Translations {
     let piholeDisable1m: String
     let piholeDisable5m: String
     let piholeDisable1h: String
+    let piholeDisableCustom: String
+    let piholeCustomDisableTitle: String
+    let piholeCustomDisableDesc: String
+    let piholeCustomDisableMinutes: String
+    let piholeQueryLog: String
+    let piholeFilterSearch: String
+    let piholeFilterAll: String
+    let piholeFilterBlocked: String
+    let piholeFilterAllowed: String
+    let piholeFilterClient: String
+    let piholeNoQueryResults: String
 
     // Beszel
     let beszelSystems: String
@@ -234,6 +248,8 @@ struct Translations {
     let gitea2FAHint: String
     let gitea2FAHintMessage: String
     let giteaFiles: String
+    let giteaFork: String
+    let giteaDefault: String
     let giteaCommits: String
     let giteaBranches: String
     let giteaNoFiles: String
@@ -255,6 +271,22 @@ struct Translations {
     let giteaCode: String
     let giteaSortRecent: String
     let giteaSortAlpha: String
+    let giteaBranchLabel: String
+    let giteaFileTooLarge: String
+
+    // Units
+    let unitDays: String
+    let unitHours: String
+    let unitMinutes: String
+    let unitGB: String
+    let unitMB: String
+    let unitKB: String
+    
+    let timeToday: String
+    let timeNow: String
+    let timeHoursAgo: String
+    let timeDaysAgo: String
+    let timeMonthsAgo: String
 
     // Settings
     let settingsPreferences: String
@@ -350,6 +382,20 @@ struct Translations {
     let onboardingAskPin: String
     let onboardingAskPinYes: String
     let onboardingAskPinNo: String
+
+    // Errors
+    let errorNotConfigured: String
+    let errorInvalidURL: String
+    let errorNetwork: String
+    let errorHttp: String
+    let errorDecoding: String
+    let errorUnauthorized: String
+    let errorBothFailed: String
+    let errorUnknown: String
+    let unknown: String
+    let none: String
+    let statusOn: String
+    let statusOff: String
 }
 
 // MARK: - Factory
@@ -364,6 +410,12 @@ extension Translations {
         case .de: return .german
         }
     }
+
+    static func current() -> Translations {
+        let savedLang = UserDefaults.standard.string(forKey: "homelab_language") ?? "en"
+        let language = Language(rawValue: savedLang) ?? .en
+        return forLanguage(language)
+    }
 }
 
 // MARK: - Localizer (accessed via environment)
@@ -371,6 +423,7 @@ extension Translations {
 @Observable
 @MainActor
 final class Localizer {
+    static let shared = Localizer()
     var language: Language = .en
 
     var t: Translations { Translations.forLanguage(language) }

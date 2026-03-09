@@ -20,7 +20,7 @@ val Context.bookmarksDataStore: DataStore<Preferences> by preferencesDataStore(n
 
 @Singleton
 class BookmarksRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val json: Json
 ) {
     private val dataStore = context.bookmarksDataStore

@@ -84,6 +84,26 @@
     <string name="pihole_top_queries">DOMINIOS MÁS SOLICITADOS</string>
     <string name="pihole_top_clients">CLIENTES MÁS ACTIVOS</string>
     <string name="pihole_total_suffix">%s en total</string>
+    <string name="pihole_domain_management">Gestión de Dominios</string>
+    <string name="pihole_allowed">Permitidos</string>
+    <string name="pihole_blocked_list">Bloqueados</string>
+    <string name="pihole_add_domain">Añadir Dominio</string>
+    <string name="pihole_no_domains">No se encontraron dominios</string>
+    <string name="pihole_add_domain_desc">Añade un nuevo dominio a la lista %s.</string>
+    <string name="pihole_disable_permanently">Desactivar indefinidamente</string>
+    <string name="pihole_disable_1m">Desactivar por 1 minuto</string>
+    <string name="pihole_disable_5m">Desactivar por 5 minutos</string>
+    <string name="pihole_disable_1h">Desactivar por 1 hora</string>
+    <string name="pihole_disable_custom">Temporizador personalizado…</string>
+    <string name="pihole_custom_disable_title">Temporizador personalizado</string>
+    <string name="pihole_custom_disable_desc">Configura una duración personalizada en minutos.</string>
+    <string name="pihole_custom_disable_minutes">Minutos</string>
+    <string name="pihole_query_log">Registro de consultas</string>
+    <string name="pihole_filter_search">Filtrar dominio o cliente</string>
+    <string name="pihole_filter_blocked">Bloqueadas</string>
+    <string name="pihole_filter_allowed">Permitidas</string>
+    <string name="pihole_filter_client">Cliente: %s</string>
+    <string name="pihole_no_query_results">Ninguna consulta coincide con los filtros actuales</string>
     
     <!-- Beszel -->
     <string name="beszel_cpu">CPU</string>
@@ -130,8 +150,16 @@
     <string name="gitea_file_too_large">Archivo demasiado grande para la vista previa.</string>
     <string name="gitea_image_decode_error">Error al decodificar la imagen.</string>
     <string name="gitea_date_today">hoy</string>
+    <string name="gitea_date_hours_ago">hace %d h</string>
     <string name="gitea_date_days_ago">hace %d d</string>
     <string name="gitea_date_months_ago">hace %d m</string>
+
+    <string name="unit_gb">GB</string>
+    <string name="unit_mb">MB</string>
+    <string name="unit_kb">KB</string>
+    <string name="unit_days">d</string>
+    <string name="unit_hours">h</string>
+    <string name="unit_minutes">m</string>
 
     <!-- Portainer -->
     <string name="portainer_endpoints">Endpoints</string>

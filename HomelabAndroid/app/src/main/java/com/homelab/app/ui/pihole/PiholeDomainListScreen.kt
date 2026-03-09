@@ -28,6 +28,8 @@ import com.homelab.app.ui.theme.StatusGreen
 import com.homelab.app.ui.theme.StatusRed
 import com.homelab.app.ui.theme.primaryColor
 import com.homelab.app.util.ServiceType
+import com.homelab.app.util.UiState
+import com.homelab.app.ui.common.ErrorScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,22 +37,30 @@ fun PiholeDomainListScreen(
     onNavigateBack: () -> Unit,
     viewModel: PiholeViewModel = hiltViewModel()
 ) {
-    val domains by viewModel.domains.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val error by viewModel.error.collectAsStateWithLifecycle()
+    val domainsState by viewModel.domainsState.collectAsStateWithLifecycle()
+    val actionError by viewModel.actionError.collectAsStateWithLifecycle()
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showingAddDialog by remember { mutableStateOf(false) }
     var newDomainText by remember { mutableStateOf("") }
     
     val selectedListType = if (selectedTabIndex == 0) PiholeDomainListType.ALLOW else PiholeDomainListType.DENY
-    val filteredDomains = domains.filter { it.type == selectedListType }
+    
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.fetchDomains()
     }
 
+    LaunchedEffect(actionError) {
+        actionError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearActionError()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.pihole_domain_management), fontWeight = FontWeight.Bold) },
@@ -76,7 +86,7 @@ fun PiholeDomainListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            TabRow(
+            SecondaryTabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.background
             ) {
@@ -92,99 +102,91 @@ fun PiholeDomainListScreen(
                 )
             }
 
-            if (isLoading && domains.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ServiceType.PIHOLE.primaryColor)
-                }
-            } else if (error != null) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = error!!,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { viewModel.fetchDomains() }) {
-                        Text(stringResource(R.string.retry))
-                    }
-                }
-            } else {
-                if (filteredDomains.isEmpty()) {
+            when (val state = domainsState) {
+                is UiState.Loading, is UiState.Idle -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.pihole_no_domains),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        CircularProgressIndicator(color = ServiceType.PIHOLE.primaryColor)
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(filteredDomains, key = { it.id }) { domain ->
-                            val dismissState = rememberSwipeToDismissBoxState(
-                                confirmValueChange = {
-                                    if (it == SwipeToDismissBoxValue.EndToStart) {
+                }
+                is UiState.Error -> {
+                    ErrorScreen(
+                        message = state.message,
+                        onRetry = { viewModel.fetchDomains() },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                is UiState.Offline -> {
+                    ErrorScreen(
+                        message = "",
+                        onRetry = { viewModel.fetchDomains() },
+                        isOffline = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                is UiState.Success -> {
+                    val filteredDomains = state.data.filter { it.type == selectedListType }
+                    if (filteredDomains.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.pihole_no_domains),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(filteredDomains, key = { it.id }) { domain ->
+                                val dismissState = rememberSwipeToDismissBoxState()
+                                LaunchedEffect(dismissState.currentValue) {
+                                    if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
                                         viewModel.removeDomain(domain.domain, selectedListType)
-                                        true
-                                    } else {
-                                        false
                                     }
                                 }
-                            )
-                            
-                            SwipeToDismissBox(
-                                state = dismissState,
-                                backgroundContent = {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp))
-                                            .padding(end = 16.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Text(
-                                            stringResource(R.string.delete), 
-                                            color = MaterialTheme.colorScheme.onError, 
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                },
-                                enableDismissFromStartToEnd = false
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    modifier = Modifier.fillMaxWidth()
+                                
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(MaterialTheme.colorScheme.error, RoundedCornerShape(12.dp))
+                                                .padding(end = 16.dp),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.delete), 
+                                                color = MaterialTheme.colorScheme.onError, 
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    },
+                                    enableDismissFromStartToEnd = false
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = if (selectedListType == PiholeDomainListType.ALLOW) StatusGreen else StatusRed
-                                        )
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Text(
-                                            text = domain.domain,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = if (selectedListType == PiholeDomainListType.ALLOW) StatusGreen else StatusRed
+                                            )
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Text(
+                                                text = domain.domain,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
                                     }
                                 }
                             }

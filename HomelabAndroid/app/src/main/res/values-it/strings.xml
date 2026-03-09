@@ -4,6 +4,14 @@
     <!-- General -->
     <string name="loading">Caricamento...</string>
     <string name="error_unknown">Errore sconosciuto</string>
+    <string name="error_server_unreachable">Server irraggiungibile. Controlla la rete o l\'indirizzo IP.</string>
+    <string name="error_timeout">Richiesta scaduta. Il server ha impiegato troppo tempo per rispondere.</string>
+    <string name="error_network">Errore di rete. Controlla la tua connessione internet.</string>
+    <string name="error_invalid_credentials">Credenziali non valide. Controlla la tua API key o i dettagli di accesso.</string>
+    <string name="error_forbidden">Accesso negato. Non hai i permessi per visualizzare questo contenuto.</string>
+    <string name="error_not_found">Risorsa non trovata sul server.</string>
+    <string name="error_server">Si è verificato un errore del server. Riprova più tardi.</string>
+    <string name="error_unknown_status">Errore: %1$d</string>
     <string name="refresh">Aggiorna</string>
     <string name="save">Salva</string>
     <string name="cancel">Annulla</string>
@@ -94,6 +102,16 @@
     <string name="pihole_disable_1m">Disabilita per 1 minuto</string>
     <string name="pihole_disable_5m">Disabilita per 5 minuti</string>
     <string name="pihole_disable_1h">Disabilita per 1 ora</string>
+    <string name="pihole_disable_custom">Timer personalizzato…</string>
+    <string name="pihole_custom_disable_title">Timer personalizzato</string>
+    <string name="pihole_custom_disable_desc">Imposta una durata personalizzata in minuti.</string>
+    <string name="pihole_custom_disable_minutes">Minuti</string>
+    <string name="pihole_query_log">Registro Query</string>
+    <string name="pihole_filter_search">Filtra dominio o client</string>
+    <string name="pihole_filter_blocked">Bloccate</string>
+    <string name="pihole_filter_allowed">Consentite</string>
+    <string name="pihole_filter_client">Client: %s</string>
+    <string name="pihole_no_query_results">Nessuna query corrisponde ai filtri attuali</string>
     <string name="retry">Riprova</string>
     <string name="delete">Elimina</string>
     <string name="confirm">Conferma</string>
@@ -137,6 +155,7 @@
     <string name="beszel_monitored_servers">SERVER MONITORATI</string>
 
     <!-- Gitea -->
+    <string name="error_gitea_user_profile">Impossibile recuperare il profilo utente.</string>
     <string name="gitea_repos">Repository</string>
     <string name="gitea_stars">STELLE</string>
     <string name="gitea_branches">BRANCHES</string>
@@ -147,7 +166,22 @@
     <string name="gitea_no_commits">Nessun commit trovato</string>
     <string name="gitea_no_issues">Nessuna issue aperta</string>
     <string name="gitea_sort_recent">Recenti</string>
-    <string name="gitea_sort_alpha">Alfabetico</string>
+    <string name="gitea_sort_alpha">A-Z</string>
+    <string name="gitea_tab_files">File</string>
+    <string name="gitea_tab_commits">Commit</string>
+    <string name="gitea_tab_issues">Issue</string>
+    <string name="gitea_tab_branches">Branch</string>
+    <string name="gitea_branch_label">Branch:</string>
+    <string name="gitea_file_too_large">File troppo grande per l\'anteprima (%s)</string>
+    <string name="gitea_preview_truncated">(Anteprima troncata…)</string>
+    <string name="gitea_image_decode_error">Impossibile decodificare l\'immagine</string>
+
+    <string name="unit_gb">GB</string>
+    <string name="unit_mb">MB</string>
+    <string name="unit_kb">KB</string>
+    <string name="unit_days">g</string>
+    <string name="unit_hours">o</string>
+    <string name="unit_minutes">m</string>
     <string name="gitea_heatmap_less">Meno</string>
     <string name="gitea_heatmap_more">Più</string>
     <string name="gitea_forks">Forks</string>
@@ -155,9 +189,8 @@
     <string name="gitea_issues">Issues</string>
     <string name="gitea_stars_label">Stelle</string>
     <string name="gitea_no_branches">Nessun branch trovato</string>
-    <string name="gitea_file_too_large">File troppo grande per l\'anteprima.</string>
-    <string name="gitea_image_decode_error">Errore nel decodificare l\'immagine.</string>
     <string name="gitea_date_today">oggi</string>
+    <string name="gitea_date_hours_ago">%d o fa</string>
     <string name="gitea_date_days_ago">%d g fa</string>
     <string name="gitea_date_months_ago">%d m fa</string>
 
@@ -189,6 +222,11 @@
     <string name="portainer_cpu_ram">CPU &amp; RAM</string>
     <string name="portainer_cpu_usage">Utilizzo CPU</string>
     <string name="portainer_memory_percent">Memoria %%</string>
+    <string name="portainer_os_label">OS</string>
+    <string name="portainer_docker_label">Docker</string>
+    <string name="portainer_arch_label">Arch</string>
+    <string name="portainer_cpu_label">CPU</string>
+    <string name="portainer_ram_label">RAM</string>
 
     <!-- Security -->
     <string name="security_title">Sicurezza</string>

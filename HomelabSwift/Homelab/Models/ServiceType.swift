@@ -1,14 +1,14 @@
 import SwiftUI
 
-enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable {
+public enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case portainer
     case pihole
     case beszel
     case gitea
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .portainer: return "Portainer"
         case .pihole:    return "Pi-hole"
@@ -17,16 +17,18 @@ enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable {
         }
     }
 
-    var description: String {
+    @MainActor
+    public var description: String {
+        let t = Localizer.shared.t
         switch self {
-        case .portainer: return "Docker container management"
-        case .pihole:    return "Network-wide ad blocking"
-        case .beszel:    return "Server monitoring"
-        case .gitea:     return "Self-hosted Git hosting"
+        case .portainer: return t.servicePortainerDesc
+        case .pihole:    return t.servicePiholeDesc
+        case .beszel:    return t.serviceBeszelDesc
+        case .gitea:     return t.serviceGiteaDesc
         }
     }
 
-    var symbolName: String {
+    public var symbolName: String {
         switch self {
         case .portainer: return "shippingbox.fill"
         case .pihole:    return "shield.fill"
@@ -35,7 +37,7 @@ enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable {
         }
     }
 
-    var colors: ServiceColorSet {
+    public var colors: ServiceColorSet {
         switch self {
         case .portainer: return ServiceColorSet(primary: Color(hex: "#13B5EA"), dark: Color(hex: "#0D8ECF"), bg: Color(hex: "#13B5EA").opacity(0.09))
         case .pihole:    return ServiceColorSet(primary: Color(hex: "#CD2326"), dark: Color(hex: "#9B1B1E"), bg: Color(hex: "#CD2326").opacity(0.09))
@@ -45,9 +47,14 @@ enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable {
     }
 }
 
-struct ServiceColorSet {
-    let primary: Color
-    let dark: Color
-    let bg: Color
-}
+public struct ServiceColorSet {
+    public let primary: Color
+    public let dark: Color
+    public let bg: Color
 
+    public init(primary: Color, dark: Color, bg: Color) {
+        self.primary = primary
+        self.dark = dark
+        self.bg = bg
+    }
+}

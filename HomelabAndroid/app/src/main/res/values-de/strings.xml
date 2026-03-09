@@ -84,6 +84,26 @@
     <string name="pihole_top_queries">AM HÄUFIGSTEN ANGEFRAGT</string>
     <string name="pihole_top_clients">AKTIVSTE CLIENTS</string>
     <string name="pihole_total_suffix">Insgesamt %s</string>
+    <string name="pihole_domain_management">Domain-Verwaltung</string>
+    <string name="pihole_allowed">Erlaubt</string>
+    <string name="pihole_blocked_list">Blockiert</string>
+    <string name="pihole_add_domain">Domain hinzufügen</string>
+    <string name="pihole_no_domains">Keine Domains gefunden</string>
+    <string name="pihole_add_domain_desc">Fügen Sie der Liste %s eine neue Domain hinzu.</string>
+    <string name="pihole_disable_permanently">Auf unbestimmte Zeit deaktivieren</string>
+    <string name="pihole_disable_1m">Für 1 Minute deaktivieren</string>
+    <string name="pihole_disable_5m">Für 5 Minuten deaktivieren</string>
+    <string name="pihole_disable_1h">Für 1 Stunde deaktivieren</string>
+    <string name="pihole_disable_custom">Benutzerdefinierter Timer…</string>
+    <string name="pihole_custom_disable_title">Benutzerdefinierter Timer</string>
+    <string name="pihole_custom_disable_desc">Legen Sie eine benutzerdefinierte Dauer in Minuten fest.</string>
+    <string name="pihole_custom_disable_minutes">Minuten</string>
+    <string name="pihole_query_log">Abfrageprotokoll</string>
+    <string name="pihole_filter_search">Domain oder Client filtern</string>
+    <string name="pihole_filter_blocked">Blockiert</string>
+    <string name="pihole_filter_allowed">Erlaubt</string>
+    <string name="pihole_filter_client">Client: %s</string>
+    <string name="pihole_no_query_results">Keine Anfrage entspricht den aktuellen Filtern</string>
     
     <!-- Beszel -->
     <string name="beszel_cpu">CPU</string>
@@ -130,8 +150,16 @@
     <string name="gitea_file_too_large">Datei zu groß für die Vorschau.</string>
     <string name="gitea_image_decode_error">Fehler beim Dekodieren des Bildes.</string>
     <string name="gitea_date_today">heute</string>
+    <string name="gitea_date_hours_ago">vor %d Std.</string>
     <string name="gitea_date_days_ago">vor %d T</string>
     <string name="gitea_date_months_ago">vor %d M</string>
+
+    <string name="unit_gb">GB</string>
+    <string name="unit_mb">MB</string>
+    <string name="unit_kb">KB</string>
+    <string name="unit_days">T</string>
+    <string name="unit_hours">Std.</string>
+    <string name="unit_minutes">Min.</string>
 
     <!-- Portainer -->
     <string name="portainer_endpoints">Endpunkte</string>

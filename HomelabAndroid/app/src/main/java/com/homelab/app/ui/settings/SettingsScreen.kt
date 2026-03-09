@@ -1,5 +1,6 @@
 package com.homelab.app.ui.settings
 
+import android.content.ClipData
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -30,9 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import com.homelab.app.R
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.AnnotatedString
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,8 +74,9 @@ fun SettingsScreen(
 
             // --- DONATION ---
             item {
-                val clipboardManager = LocalClipboardManager.current
+                val clipboard = LocalClipboard.current
                 val context = LocalContext.current
+                val scope = rememberCoroutineScope()
                 val cryptoAddress = "0x649641868e6876c2c1f04584a95679e01c1aaf0d"
 
                 Surface(
@@ -100,8 +102,12 @@ fun SettingsScreen(
                         
                         Surface(
                             onClick = { 
-                                clipboardManager.setText(AnnotatedString(cryptoAddress))
-                                Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText("Homelab donation address", cryptoAddress))
+                                    )
+                                    Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+                                }
                             },
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceContainer,

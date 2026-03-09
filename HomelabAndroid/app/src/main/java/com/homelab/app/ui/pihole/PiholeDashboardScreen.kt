@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,8 @@ import com.homelab.app.ui.theme.StatusRed
 import com.homelab.app.ui.theme.StatusOrange
 import com.homelab.app.ui.theme.StatusBlue
 import com.homelab.app.util.ServiceType
+import com.homelab.app.util.UiState
+import com.homelab.app.ui.common.ErrorScreen
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -45,6 +48,7 @@ import java.util.*
 fun PiholeDashboardScreen(
     onNavigateBack: () -> Unit,
     onNavigateToDomains: () -> Unit,
+    onNavigateToQueryLog: () -> Unit,
     viewModel: PiholeViewModel = hiltViewModel()
 ) {
     val stats by viewModel.stats.collectAsStateWithLifecycle()
@@ -53,9 +57,9 @@ fun PiholeDashboardScreen(
     val topDomains by viewModel.topDomains.collectAsStateWithLifecycle()
     val topClients by viewModel.topClients.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isToggling by viewModel.isToggling.collectAsStateWithLifecycle()
-    val error by viewModel.error.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val actionError by viewModel.actionError.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -63,10 +67,10 @@ fun PiholeDashboardScreen(
         viewModel.fetchAll()
     }
 
-    LaunchedEffect(error) {
-        error?.let {
+    LaunchedEffect(actionError) {
+        actionError?.let {
             snackbarHostState.showSnackbar(it)
-            viewModel.clearError()
+            viewModel.clearActionError()
         }
     }
 
@@ -89,58 +93,80 @@ fun PiholeDashboardScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        if (isLoading && stats == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ServiceType.PIHOLE.primaryColor)
+        when (val state = uiState) {
+            is UiState.Loading, is UiState.Idle -> {
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ServiceType.PIHOLE.primaryColor)
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Blocking Card
-                item {
-                    val isBlocking = blocking?.isEnabled == true
-                    BlockingCard(
-                        isBlocking = isBlocking,
-                        isToggling = isToggling,
-                        onToggle = { timer -> viewModel.toggleBlocking(timer) }
-                    )
-                }
-
-                // Gravity info
-                if (stats != null) {
-                    item { StatsOverview(stats = stats!!) }
-                    item { QueryActivitySection(stats = stats!!) }
-                    item { GravitySection(stats = stats!!) }
-                }
-
-                item {
-                    DomainManagementLink(onClick = onNavigateToDomains)
-                }
-
-                if (topBlocked.isNotEmpty()) {
+            is UiState.Error -> {
+                ErrorScreen(
+                    message = state.message,
+                    onRetry = { state.retryAction?.invoke() ?: viewModel.fetchAll() },
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+            is UiState.Offline -> {
+                ErrorScreen(
+                    message = "",
+                    onRetry = { viewModel.fetchAll() },
+                    isOffline = true,
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+            is UiState.Success -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Blocking Card
                     item {
-                        TopListSection(
-                            title = stringResource(R.string.pihole_top_blocked),
-                            items = topBlocked,
-                            rankColor = ServiceType.PIHOLE.primaryColor
+                        val isBlocking = blocking?.isEnabled == true
+                        BlockingCard(
+                            isBlocking = isBlocking,
+                            isToggling = isToggling,
+                            onToggle = { timer -> viewModel.toggleBlocking(timer) }
                         )
                     }
-                }
 
-                if (topDomains.isNotEmpty()) {
-                    item {
-                        TopDomainsSection(topDomains = topDomains)
+                    // Gravity info
+                    if (stats != null) {
+                        item { StatsOverview(stats = stats!!) }
+                        item { QueryActivitySection(stats = stats!!) }
+                        item { GravitySection(stats = stats!!) }
                     }
-                }
 
-                if (topClients.isNotEmpty()) {
                     item {
-                        TopClientsSection(topClients = topClients)
+                        DomainManagementLink(onClick = onNavigateToDomains)
+                    }
+
+                    item {
+                        QueryLogLink(onClick = onNavigateToQueryLog)
+                    }
+
+                    if (topBlocked.isNotEmpty()) {
+                        item {
+                            TopListSection(
+                                title = stringResource(R.string.pihole_top_blocked),
+                                items = topBlocked,
+                                rankColor = ServiceType.PIHOLE.primaryColor
+                            )
+                        }
+                    }
+
+                    if (topDomains.isNotEmpty()) {
+                        item {
+                            TopDomainsSection(topDomains = topDomains)
+                        }
+                    }
+
+                    if (topClients.isNotEmpty()) {
+                        item {
+                            TopClientsSection(topClients = topClients)
+                        }
                     }
                 }
             }
@@ -155,6 +181,8 @@ private fun BlockingCard(
     onToggle: (timer: Int?) -> Unit
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var customMinutes by remember { mutableStateOf("") }
 
     if (showDialog) {
         AlertDialog(
@@ -174,11 +202,51 @@ private fun BlockingCard(
                     TextButton(onClick = { onToggle(60); showDialog = false }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.pihole_disable_1m))
                     }
+                    TextButton(onClick = { showDialog = false; customMinutes = ""; showCustomDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.pihole_disable_custom))
+                    }
                 }
             },
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showCustomDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomDialog = false },
+            title = { Text(stringResource(R.string.pihole_custom_disable_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.pihole_custom_disable_desc))
+                    OutlinedTextField(
+                        value = customMinutes,
+                        onValueChange = { customMinutes = it.filter(Char::isDigit).take(4) },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.pihole_custom_disable_minutes)) }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val minutes = customMinutes.toIntOrNull()
+                        if (minutes != null && minutes > 0) {
+                            onToggle(minutes * 60)
+                        }
+                        showCustomDialog = false
+                    },
+                    enabled = customMinutes.toIntOrNull()?.let { it > 0 } == true
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -279,11 +347,38 @@ private fun DomainManagementLink(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = RoundedCornerShape(10.dp), color = ServiceType.PIHOLE.primaryColor.copy(alpha = 0.1f), modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.ListAlt, contentDescription = null, tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null, tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(8.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Text(
                 stringResource(R.string.pihole_domain_management),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun QueryLogLink(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(shape = RoundedCornerShape(10.dp), color = StatusBlue.copy(alpha = 0.1f), modifier = Modifier.size(36.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null, tint = StatusBlue, modifier = Modifier.padding(8.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                stringResource(R.string.pihole_query_log),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.weight(1f)
             )
