@@ -2,6 +2,9 @@ package com.homelab.app.ui.beszel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
+import com.homelab.app.data.remote.dto.beszel.BeszelContainer
+import com.homelab.app.data.remote.dto.beszel.BeszelRecordStats
 import com.homelab.app.data.remote.dto.beszel.BeszelSystem
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetails
 import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
@@ -13,12 +16,14 @@ import com.homelab.app.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import android.content.Context
 
 @HiltViewModel
 class BeszelViewModel @Inject constructor(
@@ -41,6 +46,21 @@ class BeszelViewModel @Inject constructor(
 
     private val _smartDevices = MutableStateFlow<List<BeszelSmartDevice>>(emptyList())
     val smartDevices: StateFlow<List<BeszelSmartDevice>> = _smartDevices
+
+    internal val systemDetailUiModel: StateFlow<BeszelSystemDetailUiModel?> = combine(
+        _systemDetailState,
+        _systemDetails,
+        _records,
+        _smartDevices
+    ) { state, details, records, devices ->
+        val system = (state as? UiState.Success)?.data ?: return@combine null
+        buildSystemDetailUiModel(
+            system = system,
+            details = details,
+            records = records,
+            smartDevices = devices
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         _systemsState.onEach { Logger.stateTransition("BeszelViewModel", "systemsState", it) }
@@ -123,4 +143,80 @@ class BeszelViewModel @Inject constructor(
             }
         }
     }
+
+    private fun buildSystemDetailUiModel(
+        system: BeszelSystem,
+        details: BeszelSystemDetails?,
+        records: List<BeszelSystemRecord>,
+        smartDevices: List<BeszelSmartDevice>
+    ): BeszelSystemDetailUiModel {
+        val info = system.info
+        val statsHistory = records.map(BeszelSystemRecord::stats)
+        val recentStats = statsHistory.takeLast(30)
+        val latestStats = statsHistory.lastOrNull()
+        val diskUsedGb = (latestStats?.duValue ?: info?.duValue)?.takeIf { it > 0.0 }
+        val diskTotalGb = (latestStats?.dValue ?: info?.dValue)?.takeIf { it > 0.0 }
+        val memoryUsedGb = latestStats?.memoryUsedGb
+        val memoryTotalGb = latestStats?.memoryTotalGb ?: info?.mValue?.takeIf { it > 0.0 }
+        val externalFileSystems = latestStats?.efs
+            ?.mapNotNull { (label, entry) ->
+                val total = entry.d ?: return@mapNotNull null
+                val used = entry.du ?: return@mapNotNull null
+                if (total <= 0.0 || used < 0.0) return@mapNotNull null
+                DiskFsUsage(label = label, usedGb = used, totalGb = total)
+            }
+            .orEmpty()
+        val dockerSummary = latestStats?.dockerSummary
+        val dockerUploadRateHistory = recentStats.containerSeries { it.bandwidthUpBytesPerSec }
+        val dockerDownloadRateHistory = recentStats.containerSeries { it.bandwidthDownBytesPerSec }
+
+        return BeszelSystemDetailUiModel(
+            system = system,
+            systemDetails = details,
+            statsHistory = statsHistory,
+            latestStats = latestStats,
+            smartDevices = smartDevices,
+            cpuHistoryPercent = recentStats.map { it.cpuValue },
+            memoryHistoryPercent = recentStats.map { it.mpValue },
+            memoryUsedHistoryGb = recentStats.mapNotNull { it.memoryUsedGb },
+            diskUsedGb = diskUsedGb,
+            diskTotalGb = diskTotalGb,
+            memoryUsedGb = memoryUsedGb,
+            memoryTotalGb = memoryTotalGb,
+            externalFileSystems = externalFileSystems,
+            dockerSummary = dockerSummary,
+            dockerCpuHistoryPercent = recentStats.containerSeries { it.cpuValue },
+            dockerMemoryUsedHistoryMb = recentStats.containerSeries { it.mValue },
+            dockerUploadRateHistoryBytesPerSec = dockerUploadRateHistory,
+            dockerDownloadRateHistoryBytesPerSec = dockerDownloadRateHistory,
+            hasDockerNetwork = dockerSummary?.let { summary ->
+                summary.uploadRateBytesPerSec != null &&
+                    summary.downloadRateBytesPerSec != null &&
+                    dockerUploadRateHistory.isNotEmpty() &&
+                    dockerDownloadRateHistory.size == dockerUploadRateHistory.size
+            } == true,
+            containers = latestStats?.dc.orEmpty(),
+            perCoreCpuPercent = latestStats?.cpuCoreUsageValues.orEmpty()
+        )
+    }
 }
+
+private val BeszelRecordStats.dockerSummary: DockerMetricSummary?
+    get() = dc?.takeIf { it.isNotEmpty() }?.toDockerMetricSummary()
+
+private fun List<BeszelRecordStats>.containerSeries(
+    selector: (BeszelContainer) -> Double?
+): List<Double> = mapNotNull { stats ->
+    stats.dc?.sumNullable(selector)
+}
+
+private fun List<BeszelContainer>.toDockerMetricSummary(): DockerMetricSummary = DockerMetricSummary(
+    cpuPercent = sumOf(BeszelContainer::cpuValue),
+    memoryUsedMb = sumOf(BeszelContainer::mValue),
+    uploadRateBytesPerSec = sumNullable(BeszelContainer::bandwidthUpBytesPerSec),
+    downloadRateBytesPerSec = sumNullable(BeszelContainer::bandwidthDownBytesPerSec)
+)
+
+private fun List<BeszelContainer>.sumNullable(
+    selector: (BeszelContainer) -> Double?
+): Double? = mapNotNull(selector).takeIf { it.isNotEmpty() }?.sum()

@@ -13,14 +13,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,8 +61,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -749,8 +748,6 @@ internal fun ExtraMetricChip(
     progress: Double = 0.0,
     onClick: () -> Unit = {}
 ) {
-    val haptic = LocalHapticFeedback.current
-
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
@@ -759,11 +756,7 @@ internal fun ExtraMetricChip(
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onClick()
-                }
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -921,7 +914,7 @@ internal fun DockerMetricsSection(
                 icon = Icons.Default.Dns,
                 accentColor = StatusPurple,
                 label = stringResource(R.string.beszel_docker_memory_usage),
-                value = formatMB(summary.memoryMb),
+                value = formatMB(summary.memoryUsedMb),
                 onClick = onMemoryClick
             )
         }
@@ -932,14 +925,13 @@ internal fun DockerMetricsSection(
                 icon = Icons.Default.NetworkCheck,
                 accentColor = StatusOrange,
                 label = stringResource(R.string.beszel_docker_network_io),
-                value = "↓ ${formatNetRateBytesPerSec(summary.bandwidthDownBytesPerSec ?: 0.0)}  ↑ ${formatNetRateBytesPerSec(summary.bandwidthUpBytesPerSec ?: 0.0)}",
+                value = "↓ ${formatNetRateBytesPerSec(summary.downloadRateBytesPerSec ?: 0.0)}  ↑ ${formatNetRateBytesPerSec(summary.uploadRateBytesPerSec ?: 0.0)}",
                 onClick = onNetworkClick
             )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PerCoreCpuSection(cores: List<Double>) {
     if (cores.isEmpty()) return
@@ -1009,13 +1001,10 @@ internal fun PerCoreCpuSection(cores: List<Double>) {
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        maxItemsInEachRow = 2
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        cores.forEachIndexed { index, value ->
+                        itemsIndexed(cores) { index, value ->
                             PerCoreUsageTile(
                                 label = stringResource(R.string.beszel_cpu_core_label, index),
                                 value = value
@@ -1037,7 +1026,7 @@ private fun PerCoreUsageTile(label: String, value: Double) {
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(0.48f),
+        modifier = Modifier.width(148.dp),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {

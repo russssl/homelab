@@ -31,12 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homelab.app.R
-import com.homelab.app.data.remote.dto.beszel.BeszelContainer
 import com.homelab.app.data.remote.dto.beszel.BeszelRecordStats
 import com.homelab.app.data.remote.dto.beszel.BeszelSmartDevice
-import com.homelab.app.data.remote.dto.beszel.BeszelSystem
-import com.homelab.app.data.remote.dto.beszel.BeszelSystemDetails
-import com.homelab.app.data.remote.dto.beszel.BeszelSystemRecord
 import com.homelab.app.ui.common.ErrorScreen
 import com.homelab.app.ui.theme.StatusOrange
 import com.homelab.app.ui.theme.StatusPurple
@@ -52,9 +48,7 @@ fun BeszelSystemDetailScreen(
     viewModel: BeszelViewModel = hiltViewModel()
 ) {
     val systemDetailState by viewModel.systemDetailState.collectAsStateWithLifecycle()
-    val systemDetails by viewModel.systemDetails.collectAsStateWithLifecycle()
-    val records by viewModel.records.collectAsStateWithLifecycle()
-    val smartDevices by viewModel.smartDevices.collectAsStateWithLifecycle()
+    val detailUiModel by viewModel.systemDetailUiModel.collectAsStateWithLifecycle()
 
     LaunchedEffect(systemId) {
         viewModel.fetchSystemDetail(systemId)
@@ -120,13 +114,9 @@ fun BeszelSystemDetailScreen(
             }
 
             is UiState.Success -> {
-                BeszelSystemDetailContent(
-                    system = state.data,
-                    systemDetails = systemDetails,
-                    records = records,
-                    smartDevices = smartDevices,
-                    paddingValues = paddingValues
-                )
+                detailUiModel?.let { model ->
+                    BeszelSystemDetailContent(model = model, paddingValues = paddingValues)
+                }
             }
         }
     }
@@ -134,54 +124,16 @@ fun BeszelSystemDetailScreen(
 
 @Composable
 private fun BeszelSystemDetailContent(
-    system: BeszelSystem,
-    systemDetails: BeszelSystemDetails?,
-    records: List<BeszelSystemRecord>,
-    smartDevices: List<BeszelSmartDevice>,
+    model: BeszelSystemDetailUiModel,
     paddingValues: PaddingValues
 ) {
-    val info = system.info
-    val statsHistory = remember(records) { records.map(BeszelSystemRecord::stats) }
-    val recentStats = remember(records) { statsHistory.takeLast(30) }
-    val latestStats: BeszelRecordStats? = statsHistory.lastOrNull()
-
-    val cpuHistory = remember(recentStats) { recentStats.map(BeszelRecordStats::cpuValue) }
-    val memHistory = remember(recentStats) { recentStats.map(BeszelRecordStats::mpValue) }
-    val memoryUsedHistory = remember(recentStats) { recentStats.mapNotNull(BeszelRecordStats::memoryUsedGb) }
-
-    val diskUsed = (latestStats?.duValue ?: info?.duValue)?.takeIf { it > 0.0 }
-    val diskTotal = (latestStats?.dValue ?: info?.dValue)?.takeIf { it > 0.0 }
-    val memoryUsed = latestStats?.memoryUsedGb
-    val memoryTotal = latestStats?.memoryTotalGb ?: info?.mValue?.takeIf { it > 0.0 }
-
-    val externalFileSystems = remember(latestStats) {
-        latestStats?.efs
-            ?.mapNotNull { (key, entry) ->
-                val total = entry.d ?: return@mapNotNull null
-                val used = entry.du ?: return@mapNotNull null
-                if (total <= 0.0 || used < 0.0) return@mapNotNull null
-                DiskFsUsage(label = key, usedGb = used, totalGb = total)
-            }
-            .orEmpty()
-    }
-
+    val info = model.system.info
     val expandedMetric = remember { mutableStateOf<ExtraMetricType?>(null) }
     val expandedResourceMetric = remember { mutableStateOf<ResourceMetricType?>(null) }
     val expandedDockerMetric = remember { mutableStateOf<DockerMetricType?>(null) }
     val expandedDiskFs = remember { mutableStateOf<DiskFsUsage?>(null) }
     val expandedSmartDevice = remember { mutableStateOf<BeszelSmartDevice?>(null) }
     val gpuDetailsMetric = remember { mutableStateOf<GpuMetricType?>(null) }
-    val latestDockerSummary = remember(latestStats) { latestStats?.dockerSummary }
-    val dockerCpuHistory = remember(recentStats) { recentStats.containerSeries { it.cpuValue } }
-    val dockerMemoryHistory = remember(recentStats) { recentStats.containerSeries { it.mValue } }
-    val dockerNetworkUpHistory = remember(recentStats) { recentStats.containerSeries(BeszelContainer::bandwidthUpBytesPerSec) }
-    val dockerNetworkDownHistory = remember(recentStats) { recentStats.containerSeries(BeszelContainer::bandwidthDownBytesPerSec) }
-    val hasDockerNetwork = latestDockerSummary?.let { summary ->
-        summary.bandwidthUpBytesPerSec != null &&
-            summary.bandwidthDownBytesPerSec != null &&
-            dockerNetworkUpHistory.isNotEmpty() &&
-            dockerNetworkDownHistory.size == dockerNetworkUpHistory.size
-    } == true
 
     LazyColumn(
         modifier = Modifier
@@ -191,12 +143,12 @@ private fun BeszelSystemDetailContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            BeszelHeaderCard(system)
+            BeszelHeaderCard(model.system)
         }
 
-        if (info != null || systemDetails != null) {
+        if (info != null || model.systemDetails != null) {
             item {
-                SystemInfoSection(info = info, details = systemDetails)
+                SystemInfoSection(info = info, details = model.systemDetails)
             }
         }
 
@@ -206,57 +158,56 @@ private fun BeszelSystemDetailContent(
                     cpu = info.cpuValue,
                     mp = info.mpValue,
                     dp = info.dpValue,
-                    memoryUsedGb = memoryUsed,
-                    memoryTotalGb = memoryTotal,
-                    memoryUsedHistory = memoryUsedHistory,
-                    diskUsed = diskUsed,
-                    diskTotal = diskTotal,
-                    externalFileSystems = externalFileSystems,
-                    cpuHistory = cpuHistory,
-                    memHistory = memHistory,
+                    memoryUsedGb = model.memoryUsedGb,
+                    memoryTotalGb = model.memoryTotalGb,
+                    memoryUsedHistory = model.memoryUsedHistoryGb,
+                    diskUsed = model.diskUsedGb,
+                    diskTotal = model.diskTotalGb,
+                    externalFileSystems = model.externalFileSystems,
+                    cpuHistory = model.cpuHistoryPercent,
+                    memHistory = model.memoryHistoryPercent,
                     onCpuClick = { expandedResourceMetric.value = ResourceMetricType.CPU },
                     onMemClick = { expandedResourceMetric.value = ResourceMetricType.MEMORY },
                     onDiskFsClick = { fs -> expandedDiskFs.value = fs }
                 )
             }
 
-            if (smartDevices.isNotEmpty()) {
+            if (model.smartDevices.isNotEmpty()) {
                 item {
                     SmartDevicesSection(
-                        devices = smartDevices,
+                        devices = model.smartDevices,
                         onDeviceClick = { device -> expandedSmartDevice.value = device }
                     )
                 }
             }
 
-            val containers: List<BeszelContainer> = latestStats?.dc ?: emptyList()
-            latestDockerSummary?.let { summary ->
+            model.dockerSummary?.let { summary ->
                 item {
                     DockerMetricsSection(
                         summary = summary,
-                        hasNetwork = hasDockerNetwork,
+                        hasNetwork = model.hasDockerNetwork,
                         onCpuClick = { expandedDockerMetric.value = DockerMetricType.CPU },
                         onMemoryClick = { expandedDockerMetric.value = DockerMetricType.MEMORY },
                         onNetworkClick = { expandedDockerMetric.value = DockerMetricType.NETWORK }
                     )
                 }
             }
-            latestStats?.cpuCoreUsageValues?.takeIf { it.isNotEmpty() }?.let { cores ->
+            model.perCoreCpuPercent.takeIf { it.isNotEmpty() }?.let { cores ->
                 item {
                     PerCoreCpuSection(cores = cores)
                 }
             }
-            if (containers.isNotEmpty()) {
+            if (model.containers.isNotEmpty()) {
                 item {
-                    ContainersSection(containers = containers)
+                    ContainersSection(containers = model.containers)
                 }
             }
 
-            if (latestStats != null) {
+            model.latestStats?.let { latestStats ->
                 item {
                     GpuMetricsSection(
                         latest = latestStats,
-                        history = statsHistory,
+                        history = model.statsHistory,
                         onUsageClick = { gpuDetailsMetric.value = GpuMetricType.USAGE },
                         onPowerClick = { gpuDetailsMetric.value = GpuMetricType.POWER },
                         onVramClick = { gpuDetailsMetric.value = GpuMetricType.VRAM }
@@ -265,7 +216,7 @@ private fun BeszelSystemDetailContent(
                 item {
                     ExtraMetricsSectionHost(
                         latest = latestStats,
-                        history = statsHistory,
+                        history = model.statsHistory,
                         onMetricClick = { expandedMetric.value = it }
                     )
                 }
@@ -276,7 +227,7 @@ private fun BeszelSystemDetailContent(
     expandedMetric.value?.let { metric ->
         ExtraMetricDetailsSheet(
             metric = metric,
-            history = statsHistory,
+            history = model.statsHistory,
             onDismiss = { expandedMetric.value = null }
         )
     }
@@ -285,7 +236,7 @@ private fun BeszelSystemDetailContent(
         when (metric) {
             ResourceMetricType.CPU -> {
                 CpuDetailsSheet(
-                    history = statsHistory,
+                    history = model.statsHistory,
                     onDismiss = { expandedResourceMetric.value = null }
                 )
             }
@@ -293,7 +244,7 @@ private fun BeszelSystemDetailContent(
             ResourceMetricType.MEMORY -> {
                 ResourceMetricDetailsSheet(
                     title = stringResource(R.string.beszel_memory_usage),
-                    data = memoryUsedHistory.ifEmpty { memHistory },
+                    data = model.memoryUsedHistoryGb,
                     accent = StatusPurple,
                     unitFormatter = { value -> formatGB(value) },
                     onDismiss = { expandedResourceMetric.value = null }
@@ -307,7 +258,7 @@ private fun BeszelSystemDetailContent(
             DockerMetricType.CPU -> {
                 ResourceMetricDetailsSheet(
                     title = stringResource(R.string.beszel_docker_cpu_usage),
-                    data = dockerCpuHistory,
+                    data = model.dockerCpuHistoryPercent,
                     accent = ServiceType.BESZEL.primaryColor,
                     unitFormatter = { value -> String.format("%.1f%%", value) },
                     onDismiss = { expandedDockerMetric.value = null }
@@ -317,7 +268,7 @@ private fun BeszelSystemDetailContent(
             DockerMetricType.MEMORY -> {
                 ResourceMetricDetailsSheet(
                     title = stringResource(R.string.beszel_docker_memory_usage),
-                    data = dockerMemoryHistory,
+                    data = model.dockerMemoryUsedHistoryMb,
                     accent = StatusPurple,
                     unitFormatter = { value -> formatMB(value) },
                     onDismiss = { expandedDockerMetric.value = null }
@@ -327,8 +278,8 @@ private fun BeszelSystemDetailContent(
             DockerMetricType.NETWORK -> {
                 DualMetricDetailsSheet(
                     title = stringResource(R.string.beszel_docker_network_io),
-                    data = dockerNetworkDownHistory,
-                    secondaryData = dockerNetworkUpHistory,
+                    data = model.dockerDownloadRateHistoryBytesPerSec,
+                    secondaryData = model.dockerUploadRateHistoryBytesPerSec,
                     accent = StatusOrange,
                     secondaryColor = StatusPurple,
                     unitFormatter = { value -> formatNetRateBytesPerSec(value) },
@@ -343,7 +294,7 @@ private fun BeszelSystemDetailContent(
     expandedDiskFs.value?.let { fs ->
         DiskFsDetailsSheet(
             drive = fs,
-            history = statsHistory,
+            history = model.statsHistory,
             onDismiss = { expandedDiskFs.value = null }
         )
     }
@@ -358,7 +309,7 @@ private fun BeszelSystemDetailContent(
     gpuDetailsMetric.value?.let { metric ->
         GpuDetailsSheet(
             metric = metric,
-            history = statsHistory,
+            history = model.statsHistory,
             onDismiss = { gpuDetailsMetric.value = null }
         )
     }
@@ -376,23 +327,3 @@ private fun ExtraMetricsSectionHost(
         onMetricClick = onMetricClick
     )
 }
-
-private val BeszelRecordStats.dockerSummary: DockerMetricSummary?
-    get() = dc?.takeIf { it.isNotEmpty() }?.toDockerMetricSummary()
-
-private fun List<BeszelRecordStats>.containerSeries(
-    selector: (BeszelContainer) -> Double?
-): List<Double> = mapNotNull { stats ->
-    stats.dc?.sumNullable(selector)
-}
-
-private fun List<BeszelContainer>.toDockerMetricSummary(): DockerMetricSummary = DockerMetricSummary(
-    cpuPercent = sumOf(BeszelContainer::cpuValue),
-    memoryMb = sumOf(BeszelContainer::mValue),
-    bandwidthUpBytesPerSec = sumNullable(BeszelContainer::bandwidthUpBytesPerSec),
-    bandwidthDownBytesPerSec = sumNullable(BeszelContainer::bandwidthDownBytesPerSec)
-)
-
-private fun List<BeszelContainer>.sumNullable(
-    selector: (BeszelContainer) -> Double?
-): Double? = mapNotNull(selector).takeIf { it.isNotEmpty() }?.sum()

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,14 +42,131 @@ import com.homelab.app.util.ServiceType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun BottomSheetScaffold(
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun MetricHistoryBlock(
+    data: List<Double>,
+    accent: Color,
+    unitFormatter: (Double) -> String,
+    valueLabel: String,
+    secondaryData: List<Double>? = null,
+    secondaryColor: Color = StatusOrange,
+    primaryLegend: String? = null,
+    secondaryLegend: String? = null,
+    primaryLabelFormatter: ((Double) -> String)? = null,
+    secondaryLabelFormatter: ((Double) -> String)? = null
+) {
+    val hasSecondarySeries = secondaryData != null && data.size == secondaryData.size
+    val showDualLegend = hasSecondarySeries && primaryLegend != null && secondaryLegend != null
+    val selectedIndex = remember { mutableStateOf<Int?>(null) }
+    val min = data.minOrNull()
+    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
+
+    if (data.size >= 2 && (secondaryData == null || hasSecondarySeries)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val leftParts = buildList {
+                min?.let { add("Min: ${unitFormatter(it)}") }
+                avg?.let { add("Avg: ${unitFormatter(it)}") }
+            }
+            if (leftParts.isNotEmpty()) {
+                Text(
+                    text = leftParts.joinToString("   "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        SmoothLineGraph(
+            data = data,
+            graphColor = accent,
+            secondaryData = secondaryData.takeIf { hasSecondarySeries },
+            secondaryColor = secondaryColor,
+            enableScrub = true,
+            selectedIndex = selectedIndex.value,
+            onSelectedIndexChange = { selectedIndex.value = it },
+            labelFormatter = primaryLabelFormatter ?: { value ->
+                if (showDualLegend) {
+                    "$primaryLegend: ${unitFormatter(value)}"
+                } else {
+                    "$valueLabel: ${unitFormatter(value)}"
+                }
+            },
+            secondaryLabelFormatter = secondaryLabelFormatter ?: if (showDualLegend) {
+                { value -> "$secondaryLegend: ${unitFormatter(value)}" }
+            } else {
+                null
+            }
+        )
+
+        if (showDualLegend) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(8.dp).background(accent, CircleShape))
+                    Text(
+                        text = primaryLegend,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(8.dp).background(secondaryColor, CircleShape))
+                    Text(
+                        text = secondaryLegend,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.beszel_time_axis_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        Text(
+            text = stringResource(R.string.beszel_background_update_info),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun ExtraMetricDetailsSheet(
     metric: ExtraMetricType,
     history: List<BeszelRecordStats>,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    BottomSheetScaffold(onDismiss = onDismiss) {
         val title = when (metric) {
             ExtraMetricType.TEMPERATURE -> stringResource(R.string.beszel_temps)
             ExtraMetricType.LOAD -> stringResource(R.string.beszel_load_avg)
@@ -126,9 +244,6 @@ internal fun ExtraMetricDetailsSheet(
             ExtraMetricType.SWAP -> stringResource(R.string.beszel_swap)
         }
 
-        val min = data.minOrNull()
-        val avg = if (data.isNotEmpty()) data.sum() / data.size else null
-        val selectedIndex = remember { mutableStateOf<Int?>(null) }
         val latest = history.lastOrNull()
         val primaryLegend = when (metric) {
             ExtraMetricType.NETWORK -> stringResource(R.string.beszel_download)
@@ -143,113 +258,19 @@ internal fun ExtraMetricDetailsSheet(
             else -> null
         }
 
-        Column(
-            modifier = androidx.compose.ui.Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        MetricHistoryBlock(
+            data = data,
+            accent = accent,
+            unitFormatter = unitFormatter,
+            valueLabel = valueLabel,
+            secondaryData = secondaryData,
+            secondaryColor = secondaryColor,
+            primaryLegend = primaryLegend,
+            secondaryLegend = secondaryLegend
+        )
 
-            if (data.size >= 2) {
-                Row(
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${unitFormatter(it)}") }
-                        avg?.let { add("Avg: ${unitFormatter(it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                val primaryFormatterForGraph: (Double) -> String
-                val secondaryFormatterForGraph: ((Double) -> String)?
-
-                if (secondaryData != null && primaryLegend != null && secondaryLegend != null) {
-                    primaryFormatterForGraph = { v -> "$primaryLegend: ${unitFormatter(v)}" }
-                    secondaryFormatterForGraph = { v -> "$secondaryLegend: ${unitFormatter(v)}" }
-                } else {
-                    primaryFormatterForGraph = { v -> "$valueLabel: ${unitFormatter(v)}" }
-                    secondaryFormatterForGraph = null
-                }
-
-                SmoothLineGraph(
-                    data = data,
-                    graphColor = accent,
-                    secondaryData = secondaryData,
-                    secondaryColor = secondaryColor,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = primaryFormatterForGraph,
-                    secondaryLabelFormatter = secondaryFormatterForGraph
-                )
-
-                if (secondaryData != null && primaryLegend != null && secondaryLegend != null) {
-                    Row(
-                        modifier = androidx.compose.ui.Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(accent, CircleShape)
-                            )
-                            Text(
-                                text = primaryLegend,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(secondaryColor, CircleShape)
-                            )
-                            Text(
-                                text = secondaryLegend,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.beszel_background_update_info),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            when (metric) {
+        when (metric) {
                 ExtraMetricType.TEMPERATURE -> {
                     val sensors = latest?.temperatureSensors.orEmpty().entries.sortedByDescending { it.value }
                     if (sensors.isNotEmpty()) {
@@ -288,7 +309,6 @@ internal fun ExtraMetricDetailsSheet(
 
                 else -> Unit
             }
-        }
     }
 }
 
@@ -298,12 +318,8 @@ internal fun CpuDetailsSheet(
     history: List<BeszelRecordStats>,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val series = history.mapNotNull { it.cpu }
     val latest = history.lastOrNull()
-    val selectedIndex = remember { mutableStateOf<Int?>(null) }
-    val min = series.minOrNull()
-    val avg = if (series.isNotEmpty()) series.sum() / series.size else null
     val breakdownLabels = listOf(
         stringResource(R.string.beszel_cpu_user),
         stringResource(R.string.beszel_cpu_system),
@@ -312,54 +328,18 @@ internal fun CpuDetailsSheet(
         stringResource(R.string.beszel_cpu_idle)
     )
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.beszel_cpu),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            if (series.size >= 2) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${String.format("%.1f%%", it)}") }
-                        avg?.let { add("Avg: ${String.format("%.1f%%", it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                SmoothLineGraph(
-                    data = series,
-                    graphColor = ServiceType.BESZEL.primaryColor,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = { value -> "CPU: ${String.format("%.1f%%", value)}" }
-                )
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(
+            text = stringResource(R.string.beszel_cpu),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        MetricHistoryBlock(
+            data = series,
+            accent = ServiceType.BESZEL.primaryColor,
+            unitFormatter = { value -> String.format("%.1f%%", value) },
+            valueLabel = stringResource(R.string.beszel_cpu)
+        )
 
             val breakdown = latest?.cpuBreakdownValues.orEmpty()
             if (breakdown.isNotEmpty()) {
@@ -374,8 +354,6 @@ internal fun CpuDetailsSheet(
                     }
                 }
             }
-
-        }
     }
 }
 
@@ -386,9 +364,6 @@ internal fun DiskFsDetailsSheet(
     history: List<BeszelRecordStats>,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val selectedIndex = remember { mutableStateOf<Int?>(null) }
-
     // Build usage history for this filesystem (percentage used)
     val data = if (drive.label == "root") {
         history.mapNotNull { stats ->
@@ -421,89 +396,39 @@ internal fun DiskFsDetailsSheet(
         }
     }
 
-    val min = data.minOrNull()
-    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
     val readLabel = stringResource(R.string.beszel_read)
     val writeLabel = stringResource(R.string.beszel_write)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.beszel_disk) + " • ${drive.label}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(
+            text = stringResource(R.string.beszel_disk) + " • ${drive.label}",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "${formatGB(drive.usedGb)} / ${formatGB(drive.totalGb)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        MetricHistoryBlock(
+            data = data,
+            accent = StatusOrange,
+            unitFormatter = { value -> String.format("%.1f%%", value) },
+            valueLabel = drive.label
+        )
+
+        if (readData.isNotEmpty() && readData.size == writeData.size) {
+            DetailSectionTitle(stringResource(R.string.beszel_disk_io))
+            MetricHistoryBlock(
+                data = readData,
+                accent = StatusOrange,
+                unitFormatter = { value -> formatNetRateBytesPerSec(value) },
+                valueLabel = stringResource(R.string.beszel_disk_io),
+                secondaryData = writeData,
+                secondaryColor = StatusPurple,
+                primaryLegend = readLabel,
+                secondaryLegend = writeLabel
             )
-            Text(
-                text = "${formatGB(drive.usedGb)} / ${formatGB(drive.totalGb)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (data.size >= 2) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${String.format("%.1f%%", it)}") }
-                        avg?.let { add("Avg: ${String.format("%.1f%%", it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                SmoothLineGraph(
-                    data = data,
-                    graphColor = StatusOrange,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = { v -> String.format("%s: %.1f%%", drive.label, v) }
-                )
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (readData.isNotEmpty() && readData.size == writeData.size) {
-                    Text(
-                        text = stringResource(R.string.beszel_disk_io),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    SmoothLineGraph(
-                        data = readData,
-                        graphColor = StatusOrange,
-                        secondaryData = writeData,
-                        secondaryColor = StatusPurple,
-                        enableScrub = true,
-                        selectedIndex = selectedIndex.value,
-                        onSelectedIndexChange = { selectedIndex.value = it },
-                        labelFormatter = { v -> "$readLabel: ${formatNetRateBytesPerSec(v)}" },
-                        secondaryLabelFormatter = { v -> "$writeLabel: ${formatNetRateBytesPerSec(v)}" }
-                    )
-                }
-            } else {
-                Text(
-                    text = stringResource(R.string.beszel_background_update_info),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -515,99 +440,52 @@ internal fun GpuDetailsSheet(
     history: List<BeszelRecordStats>,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val latestGpu = history.lastOrNull()?.primaryGpu
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        val latestGpu = history.lastOrNull()?.primaryGpu
+    val title: String
+    val series: List<Double>
+    val accent: Color
+    val formatter: (Double) -> String
 
-        val title: String
-        val series: List<Double>
-        val accent: Color
-        val formatter: (Double) -> String
+    when (metric) {
+        GpuMetricType.USAGE -> {
+            title = stringResource(R.string.beszel_gpu_usage_label_full)
+            series = history.mapNotNull { it.gpuUsagePercent }.takeLast(240)
+            accent = ServiceType.BESZEL.primaryColor
+            formatter = { v: Double -> String.format("%.0f%%", v) }
+        }
+        GpuMetricType.POWER -> {
+            title = stringResource(R.string.beszel_gpu_power_label_full)
+            series = history.mapNotNull { it.gpuPowerWatts }.takeLast(240)
+            accent = StatusPurple
+            formatter = { v: Double -> String.format("%.1f W", v) }
+        }
+        GpuMetricType.VRAM -> {
+            title = stringResource(R.string.beszel_gpu_vram_label_full)
+            series = history.mapNotNull { it.gpuVramPercent }.takeLast(240)
+            accent = StatusOrange
+            formatter = { v: Double -> String.format("%.1f%%", v) }
+        }
+    }
 
-        when (metric) {
-            GpuMetricType.USAGE -> {
-                title = stringResource(R.string.beszel_gpu_usage_label_full)
-                series = history.mapNotNull { it.gpuUsagePercent }.takeLast(240)
-                accent = ServiceType.BESZEL.primaryColor
-                formatter = { v: Double -> String.format("%.0f%%", v) }
-            }
-            GpuMetricType.POWER -> {
-                title = stringResource(R.string.beszel_gpu_power_label_full)
-                series = history.mapNotNull { it.gpuPowerWatts }.takeLast(240)
-                accent = StatusPurple
-                formatter = { v: Double -> String.format("%.1f W", v) }
-            }
-            GpuMetricType.VRAM -> {
-                title = stringResource(R.string.beszel_gpu_vram_label_full)
-                series = history.mapNotNull { it.gpuVramPercent }.takeLast(240)
-                accent = StatusOrange
-                formatter = { v: Double -> String.format("%.1f%%", v) }
-            }
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+        latestGpu?.let { gpu ->
+            Text(
+                text = gpu.n,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-            latestGpu?.let { gpu ->
-                Text(
-                    text = gpu.n,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (series.size >= 2) {
-                val min = series.minOrNull()
-                val avg = if (series.isNotEmpty()) series.sum() / series.size else null
-                val selectedIndex = remember { mutableStateOf<Int?>(null) }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${formatter(it)}") }
-                        avg?.let { add("Avg: ${formatter(it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                SmoothLineGraph(
-                    data = series,
-                    graphColor = accent,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = formatter
-                )
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.beszel_background_update_info),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        MetricHistoryBlock(
+            data = series,
+            accent = accent,
+            unitFormatter = formatter,
+            valueLabel = title,
+            primaryLabelFormatter = formatter
+        )
     }
 }
 
@@ -617,110 +495,97 @@ internal fun SmartDetailsSheet(
     device: BeszelSmartDevice,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(
+            text = stringResource(R.string.beszel_smart_title_device, device.device ?: device.model ?: ""),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.beszel_smart_title_device, device.device ?: device.model ?: ""),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                device.model?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    device.capacityBytes?.let {
-                        Text(
-                            text = formatBytes(it.toDouble()),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    device.type?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    device.temperatureCelsius?.let {
-                        Text(
-                            text = String.format("%.0f°C", it),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = stringResource(R.string.beszel_smart_attributes_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            if (device.attributes.isEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            device.model?.let {
                 Text(
-                    text = stringResource(R.string.beszel_background_update_info),
+                    text = it,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    device.attributes.forEach { attr ->
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = (attr.id?.let { "$it " } ?: "") + attr.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                device.capacityBytes?.let {
+                    Text(
+                        text = formatBytes(it.toDouble()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                device.type?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                device.temperatureCelsius?.let {
+                    Text(
+                        text = String.format("%.0f°C", it),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
 
-                                val summaryText = if (attr.value == null && attr.worst == null && attr.threshold == null) {
-                                    // NVMe-style attributes: show raw string or raw value
-                                    attr.rawString ?: attr.rawValue?.toString().orEmpty()
-                                } else {
-                                    val valueText = attr.value?.let { "Value $it" } ?: ""
-                                    val worstText = attr.worst?.let { "Worst $it" } ?: ""
-                                    val thresholdText = attr.threshold?.let { "Th $it" } ?: ""
-                                    listOf(valueText, worstText, thresholdText)
-                                        .filter { it.isNotEmpty() }
-                                        .joinToString(" • ")
-                                }
+        Text(
+            text = stringResource(R.string.beszel_smart_attributes_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
 
-                                if (summaryText.isNotEmpty()) {
-                                    Text(
-                                        text = summaryText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+        if (device.attributes.isEmpty()) {
+            Text(
+                text = stringResource(R.string.beszel_background_update_info),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                device.attributes.forEach { attr ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = (attr.id?.let { "$it " } ?: "") + attr.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            val summaryText = if (attr.value == null && attr.worst == null && attr.threshold == null) {
+                                attr.rawString ?: attr.rawValue?.toString().orEmpty()
+                            } else {
+                                val valueText = attr.value?.let { "Value $it" } ?: ""
+                                val worstText = attr.worst?.let { "Worst $it" } ?: ""
+                                val thresholdText = attr.threshold?.let { "Th $it" } ?: ""
+                                listOf(valueText, worstText, thresholdText)
+                                    .filter { it.isNotEmpty() }
+                                    .joinToString(" • ")
                             }
-                            attr.rawString?.let {
-                                // For SATA-style attributes this adds more context; for NVMe
-                                // many entries won't have a rawString so this is a no-op.
+
+                            if (summaryText.isNotEmpty()) {
                                 Text(
-                                    text = it,
+                                    text = summaryText,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                        }
+                        attr.rawString?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -738,64 +603,14 @@ internal fun ResourceMetricDetailsSheet(
     unitFormatter: (Double) -> String,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val selectedIndex = remember { mutableStateOf<Int?>(null) }
-    val min = data.minOrNull()
-    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
-
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = androidx.compose.ui.Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-            if (data.size >= 2) {
-                Row(
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${unitFormatter(it)}") }
-                        avg?.let { add("Avg: ${unitFormatter(it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                val valueLabel = title
-
-                SmoothLineGraph(
-                    data = data,
-                    graphColor = accent,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = { v -> "$valueLabel: ${unitFormatter(v)}" }
-                )
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.beszel_background_update_info),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        MetricHistoryBlock(
+            data = data,
+            accent = accent,
+            unitFormatter = unitFormatter,
+            valueLabel = title
+        )
     }
 }
 
@@ -915,88 +730,18 @@ internal fun DualMetricDetailsSheet(
     secondaryLegend: String,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val selectedIndex = remember { mutableStateOf<Int?>(null) }
-    val min = data.minOrNull()
-    val avg = if (data.isNotEmpty()) data.sum() / data.size else null
-
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-            if (data.size >= 2 && data.size == secondaryData.size) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val leftParts = buildList {
-                        min?.let { add("Min: ${unitFormatter(it)}") }
-                        avg?.let { add("Avg: ${unitFormatter(it)}") }
-                    }
-                    if (leftParts.isNotEmpty()) {
-                        Text(
-                            text = leftParts.joinToString("   "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                SmoothLineGraph(
-                    data = data,
-                    graphColor = accent,
-                    secondaryData = secondaryData,
-                    secondaryColor = secondaryColor,
-                    enableScrub = true,
-                    selectedIndex = selectedIndex.value,
-                    onSelectedIndexChange = { selectedIndex.value = it },
-                    labelFormatter = { v -> "$primaryLegend: ${unitFormatter(v)}" },
-                    secondaryLabelFormatter = { v -> "$secondaryLegend: ${unitFormatter(v)}" }
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).background(accent, CircleShape))
-                        Text(
-                            text = primaryLegend,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).background(secondaryColor, CircleShape))
-                        Text(
-                            text = secondaryLegend,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Text(
-                    text = stringResource(R.string.beszel_time_axis_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.beszel_background_update_info),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+    BottomSheetScaffold(onDismiss = onDismiss) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        MetricHistoryBlock(
+            data = data,
+            accent = accent,
+            unitFormatter = unitFormatter,
+            valueLabel = title,
+            secondaryData = secondaryData,
+            secondaryColor = secondaryColor,
+            primaryLegend = primaryLegend,
+            secondaryLegend = secondaryLegend
+        )
     }
 }
 
