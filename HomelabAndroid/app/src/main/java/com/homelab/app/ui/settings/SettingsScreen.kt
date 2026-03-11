@@ -841,7 +841,11 @@ private fun ServiceInstanceRow(
                         onClick = onSetDefault,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text(stringResource(R.string.settings_set_default))
+                        Text(
+                            text = stringResource(R.string.home_default_badge),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                 }
                 OutlinedButton(

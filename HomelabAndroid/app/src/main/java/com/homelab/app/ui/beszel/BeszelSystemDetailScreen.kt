@@ -35,6 +35,7 @@ import com.homelab.app.data.remote.dto.beszel.BeszelSmartDevice
 import com.homelab.app.ui.common.ErrorScreen
 import com.homelab.app.ui.theme.StatusOrange
 import com.homelab.app.ui.theme.StatusPurple
+import com.homelab.app.ui.theme.primaryColor
 import com.homelab.app.util.ServiceType
 import com.homelab.app.util.UiState
 

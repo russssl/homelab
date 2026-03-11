@@ -3,10 +3,15 @@ package com.homelab.app.ui.home
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import java.text.NumberFormat
+import java.util.Locale
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +43,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Source
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -58,8 +66,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -708,9 +719,9 @@ fun ServiceCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             val statusText = when {
-                isConnected && isReachable == false -> stringResource(R.string.home_status_unreachable)
-                isConnected -> stringResource(R.string.home_status_connected)
-                else -> stringResource(R.string.home_status_disconnected)
+                isConnected && isReachable == false -> stringResource(R.string.error_server_unreachable)
+                isConnected -> stringResource(R.string.home_status_online)
+                else -> stringResource(R.string.home_status_offline)
             }
 
             val statusColor = when {

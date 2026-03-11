@@ -25,7 +25,7 @@ interface BeszelApi {
         @Query("sort") sort: String = "-updated",
         @Query("perPage") perPage: Int = 50,
         // Only fetch fields needed for the dashboard: identity + CPU/memory + disk (root + extra filesystems).
-        @Query("fields") fields: String = "id,name,host,status,info.cpu,info.mp,info.dp,info.efs"
+        @Query("fields") fields: String = "id,name,host,status,info.cpu,info.mp,info.dp,info.efs",
         @Header("X-Homelab-Instance-Id") instanceId: String
     ): BeszelSystemsResponse
 
