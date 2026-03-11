@@ -27,19 +27,18 @@ class BeszelRepository @Inject constructor(
         }
     }
 
-    suspend fun getSystems(): List<BeszelSystem> {
-        val response = api.getSystems()
+    suspend fun getSystems(instanceId: String): List<BeszelSystem> {
+        val response = api.getSystems(instanceId = instanceId)
         return response.items
     }
 
-    suspend fun getSystem(id: String): BeszelSystem {
-        return api.getSystem(id = id)
+    suspend fun getSystem(instanceId: String, id: String): BeszelSystem {
+        return api.getSystem(instanceId = instanceId, id = id)
     }
 
-    suspend fun getSystemRecords(systemId: String, limit: Int = 60): List<BeszelSystemRecord> {
-        // Formattazione manuale del filter di Pocketbase
+    suspend fun getSystemRecords(instanceId: String, systemId: String, limit: Int = 60): List<BeszelSystemRecord> {
         val filter = "system='$systemId'"
-        val response = api.getSystemRecords(filter = filter, limit = limit)
+        val response = api.getSystemRecords(instanceId = instanceId, filter = filter, limit = limit)
         return response.items
     }
 }

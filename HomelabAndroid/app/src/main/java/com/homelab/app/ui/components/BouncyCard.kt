@@ -29,8 +29,8 @@ fun BouncyCard(
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.96f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
         ),
         label = "BouncyScale"
     )

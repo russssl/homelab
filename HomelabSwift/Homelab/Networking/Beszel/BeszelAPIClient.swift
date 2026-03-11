@@ -1,10 +1,14 @@
 import Foundation
 
 actor BeszelAPIClient {
-    private let engine = BaseNetworkEngine(serviceType: .beszel)
+    private let engine: BaseNetworkEngine
     private var baseURL: String = ""
     private var fallbackURL: String = ""
     private var token: String = ""
+
+    init(instanceId: UUID) {
+        self.engine = BaseNetworkEngine(serviceType: .beszel, instanceId: instanceId)
+    }
 
     // MARK: - Configuration
 

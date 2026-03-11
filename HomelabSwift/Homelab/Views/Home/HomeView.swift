@@ -1,29 +1,28 @@
 import SwiftUI
 import Darwin
 
-// Maps to app/(tabs)/(home)/index.tsx — the launcher screen
-
 struct HomeView: View {
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(Localizer.self) private var localizer
-    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showLogin: ServiceType? = nil
+    @State private var showingServiceOrder = false
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
-    private var hasServices: Bool {
-        ServiceType.allCases.contains { !settingsStore.isServiceHidden($0) && servicesStore.isConnected($0) }
+    private var visibleTypes: [ServiceType] {
+        settingsStore.serviceOrder.filter { !settingsStore.isServiceHidden($0) }
     }
-    
-    // Computed property to check if ANY active, un-hidden service is currently unreachable
+
+    private var hasServices: Bool {
+        visibleTypes.contains { servicesStore.hasInstances(for: $0) }
+    }
+
     private var hasUnreachableService: Bool {
-        ServiceType.allCases.contains { type in
-            !settingsStore.isServiceHidden(type) &&
-            servicesStore.isConnected(type) &&
-            servicesStore.reachability[type] == false
-        }
+        visibleTypes
+            .flatMap { servicesStore.instances(for: $0) }
+            .contains { servicesStore.reachability(for: $0.id) == false }
     }
 
     var body: some View {
@@ -31,12 +30,10 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     headerSection
-                    if hasServices {
-                        if hasUnreachableService || servicesStore.isTailscaleConnected {
-                            tailscaleSection
-                        }
-                        serviceGrid
+                    if hasUnreachableService || servicesStore.isTailscaleConnected {
+                        tailscaleSection
                     }
+                    serviceGrid
                     DashboardSummary()
                     footerSection
                 }
@@ -47,19 +44,14 @@ struct HomeView: View {
             .sheet(item: $showLogin) { type in
                 ServiceLoginView(serviceType: type)
             }
-            .navigationDestination(for: ServiceType.self) { type in
-                serviceDestination(for: type)
+            .sheet(isPresented: $showingServiceOrder) {
+                ServiceOrderSheet()
             }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    // Re-check reachability when app returns to foreground
-                    Task { await servicesStore.checkAllReachability() }
-                }
+            .navigationDestination(for: HomeServiceRoute.self) { route in
+                serviceDestination(for: route)
             }
         }
     }
-
-    // MARK: - Header
 
     private var headerSection: some View {
         HStack {
@@ -70,33 +62,44 @@ struct HomeView: View {
 
             Spacer()
 
-            // Connected badge
-            HStack(spacing: 5) {
-                Image(systemName: "bolt.fill")
-                    .font(.caption2)
-                Text("\(servicesStore.connectedCount)/4")
-                    .font(.subheadline.bold())
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption2)
+                        .accessibilityHidden(true)
+                    Text("\(servicesStore.connectedCount)")
+                        .font(.subheadline.bold())
+                }
+                .foregroundStyle(AppTheme.accent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .glassCard(cornerRadius: 20, tint: AppTheme.accent.opacity(0.15))
+
+                Button {
+                    HapticManager.light()
+                    showingServiceOrder = true
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(AppTheme.accent.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(localizer.t.homeReorderServices)
             }
-            .foregroundStyle(AppTheme.accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .glassCard(cornerRadius: 20, tint: AppTheme.accent.opacity(0.15))
         }
         .padding(.top, 8)
         .padding(.bottom, 16)
     }
 
-    // MARK: - Tailscale Section
-    
     private var tailscaleSection: some View {
         Button {
             HapticManager.medium()
             if let url = URL(string: "tailscale://app") {
                 UIApplication.shared.open(url, options: [:]) { success in
-                    if !success {
-                        if let appStoreUrl = URL(string: "https://apps.apple.com/app/tailscale/id1475387142") {
-                            UIApplication.shared.open(appStoreUrl)
-                        }
+                    if !success, let appStoreUrl = URL(string: "https://apps.apple.com/app/tailscale/id1475387142") {
+                        UIApplication.shared.open(appStoreUrl)
                     }
                 }
             }
@@ -106,10 +109,11 @@ struct HomeView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(servicesStore.isTailscaleConnected ? AppTheme.running : Color.black)
                         .frame(width: 44, height: 44)
-                    
+
                     Image(systemName: servicesStore.isTailscaleConnected ? "shield.checkered" : "network.badge.shield.half.filled")
                         .font(.title3)
                         .foregroundStyle(.white)
+                        .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -124,19 +128,20 @@ struct HomeView: View {
 
                 Spacer(minLength: 0)
 
-                // Status indicator
                 if servicesStore.isTailscaleConnected {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(AppTheme.running)
                         .font(.title3)
+                        .accessibilityHidden(true)
                 } else {
                     HStack(spacing: 4) {
-                        Text("VPN")
+                        Text(localizer.t.tailscaleBadge)
                             .font(.caption2.bold())
                             .foregroundStyle(AppTheme.textMuted)
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(AppTheme.textMuted)
+                            .accessibilityHidden(true)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -151,48 +156,49 @@ struct HomeView: View {
         .padding(.bottom, 16)
     }
 
-
-    // MARK: - Service Grid
-
     private var serviceGrid: some View {
-        GlassGroup(spacing: 14) {
+        GlassGroup(spacing: 16) {
             LazyVGrid(columns: columns, spacing: 14) {
-                ForEach(ServiceType.allCases.filter { !settingsStore.isServiceHidden($0) }) { type in
-                    let connected = servicesStore.isConnected(type)
-                    if connected {
-                        NavigationLink(value: type) {
-                            ServiceCardContent(
-                                type: type,
-                                isConnected: true,
-                                reachable: servicesStore.isReachable(type),
-                                isPinging: servicesStore.isPinging(type),
-                                t: localizer.t
-                            ) {
-                                Task { await servicesStore.checkReachability(for: type) }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    } else {
+                ForEach(visibleTypes) { type in
+                    let instances = servicesStore.instances(for: type)
+                    if instances.isEmpty {
                         Button {
                             HapticManager.medium()
                             showLogin = type
                         } label: {
                             ServiceCardContent(
                                 type: type,
+                                label: type.displayName,
                                 isConnected: false,
+                                isPreferred: false,
                                 reachable: nil,
                                 isPinging: false,
                                 t: localizer.t
                             )
                         }
                         .buttonStyle(.plain)
+                    } else {
+                        ForEach(instances) { instance in
+                            NavigationLink(value: HomeServiceRoute(type: type, instanceId: instance.id)) {
+                                ServiceCardContent(
+                                    type: type,
+                                    label: instance.displayLabel,
+                                    isConnected: true,
+                                    isPreferred: servicesStore.preferredInstance(for: type)?.id == instance.id,
+                                    reachable: servicesStore.reachability(for: instance.id),
+                                    isPinging: servicesStore.isPinging(instanceId: instance.id),
+                                    t: localizer.t
+                                ) {
+                                    Task { await servicesStore.checkReachability(for: instance.id) }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
         }
     }
-
-    // MARK: - Footer
 
     private var footerSection: some View {
         Text("\(localizer.t.launcherServices) • \(servicesStore.connectedCount) \(localizer.t.launcherConnected.lowercased())")
@@ -204,21 +210,74 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func serviceDestination(for type: ServiceType) -> some View {
-        switch type {
-        case .portainer: PortainerDashboard()
-        case .pihole:    PiHoleDashboard()
-        case .beszel:    BeszelDashboard()
-        case .gitea:     GiteaDashboard()
+    private func serviceDestination(for route: HomeServiceRoute) -> some View {
+        switch route.type {
+        case .portainer: PortainerDashboard(instanceId: route.instanceId)
+        case .pihole: PiHoleDashboard(instanceId: route.instanceId)
+        case .beszel: BeszelDashboard(instanceId: route.instanceId)
+        case .gitea: GiteaDashboard(instanceId: route.instanceId)
         }
     }
 }
 
-// MARK: - Service Card
+private struct HomeServiceRoute: Hashable {
+    let type: ServiceType
+    let instanceId: UUID
+}
+
+private struct ServiceOrderSheet: View {
+    @Environment(SettingsStore.self) private var settingsStore
+    @Environment(Localizer.self) private var localizer
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(settingsStore.serviceOrder) { type in
+                    HStack {
+                        Text(type.displayName)
+                            .font(.body.weight(.semibold))
+                        Spacer()
+                        HStack(spacing: 12) {
+                            Button {
+                                settingsStore.moveService(type, offset: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(!settingsStore.canMoveService(type, offset: -1))
+                            .accessibilityLabel(localizer.t.settingsMoveUp)
+
+                            Button {
+                                settingsStore.moveService(type, offset: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(!settingsStore.canMoveService(type, offset: 1))
+                            .accessibilityLabel(localizer.t.settingsMoveDown)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(localizer.t.homeReorderServices)
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.background)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(localizer.t.done) { dismiss() }
+                }
+            }
+        }
+    }
+}
 
 private struct ServiceCardContent: View {
     let type: ServiceType
+    let label: String
     let isConnected: Bool
+    let isPreferred: Bool
     let reachable: Bool?
     let isPinging: Bool
     let t: Translations
@@ -226,21 +285,25 @@ private struct ServiceCardContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Icon row with refresh button
             HStack {
-                Image(systemName: type.symbolName)
-                    .font(.title2)
-                    .foregroundStyle(type.colors.primary)
-                    .frame(width: 56, height: 56)
-                    .background(type.colors.bg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                AsyncImage(url: URL(string: type.iconUrl)) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFit()
+                    } else {
+                        Image(systemName: type.symbolName)
+                            .font(.title2)
+                            .foregroundStyle(type.colors.primary)
+                    }
+                }
+                .frame(width: 34, height: 34)
+                .frame(width: 56, height: 56)
+                .background(type.colors.bg, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .accessibilityHidden(true)
 
                 Spacer()
 
-                // Refresh button when unreachable
                 if isConnected && reachable == false, let onRefresh {
-                    Button {
-                        onRefresh()
-                    } label: {
+                    Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
                             .font(.subheadline.bold())
                             .foregroundStyle(type.colors.primary)
@@ -250,8 +313,8 @@ private struct ServiceCardContent: View {
                             .animation(isPinging ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isPinging)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(t.refresh)
                 } else if isConnected && reachable == nil {
-                    // Checking indicator
                     ProgressView()
                         .controlSize(.small)
                         .tint(type.colors.primary)
@@ -259,39 +322,34 @@ private struct ServiceCardContent: View {
             }
             .padding(.bottom, 10)
 
-            // Name
-            VStack(alignment: .leading, spacing: 3) {
-                Text(serviceName)
-                    .font(.body.bold())
-                    .foregroundStyle(.primary)
-            }
+            Text(label)
+                .font(.body.bold())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
             Spacer(minLength: 8)
 
-            // Status badge
-            statusBadge
+            HStack(spacing: 6) {
+                statusBadge
+                if isPreferred {
+                    Text(t.badgeDefault)
+                        .font(.caption2.bold())
+                        .foregroundStyle(type.colors.primary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(type.colors.primary.opacity(0.12), in: Capsule())
+                        .lineLimit(1)
+                }
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
         .padding(14)
         .contentShape(Rectangle())
         .glassCard()
-    }
-
-    private var serviceName: String {
-        switch type {
-        case .portainer: return t.servicePortainer
-        case .pihole:    return t.servicePihole
-        case .beszel:    return t.serviceBeszel
-        case .gitea:     return t.serviceGitea
-        }
-    }
-
-    private var serviceDesc: String {
-        switch type {
-        case .portainer: return t.servicePortainerDesc
-        case .pihole:    return t.servicePiholeDesc
-        case .beszel:    return t.serviceBeszelDesc
-        case .gitea:     return t.serviceGiteaDesc
+        .task {
+            if isConnected, reachable == nil, !isPinging {
+                onRefresh?()
+            }
         }
     }
 
@@ -305,6 +363,7 @@ private struct ServiceCardContent: View {
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundStyle(AppTheme.textMuted)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -319,23 +378,26 @@ private struct ServiceCardContent: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(AppTheme.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        } else if reachable == nil {
-            Text(t.statusVerifying)
-                .font(.caption2.bold())
-                .foregroundStyle(AppTheme.textMuted)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        } else {
+        } else if reachable == true {
             HStack(spacing: 5) {
                 Circle().fill(AppTheme.running).frame(width: 6, height: 6)
-                Text(t.launcherConnected)
+                Text(t.statusOnline)
                     .font(.caption2.bold())
                     .foregroundStyle(AppTheme.running)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(AppTheme.running.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            HStack(spacing: 5) {
+                Circle().fill(AppTheme.info).frame(width: 6, height: 6)
+                Text(t.statusVerifying)
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.info)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(AppTheme.info.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 }

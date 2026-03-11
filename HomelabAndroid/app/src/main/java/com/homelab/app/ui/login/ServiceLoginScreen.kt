@@ -1,30 +1,65 @@
 package com.homelab.app.ui.login
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,42 +79,54 @@ fun ServiceLoginScreen(
     onDismiss: () -> Unit,
     viewModel: ServiceLoginViewModel = hiltViewModel()
 ) {
-    var url by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var apiKey by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
-
+    val existingInstance by viewModel.existingInstance.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    var label by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var fallbackUrl by remember { mutableStateOf("") }
+    var showSecret by remember { mutableStateOf(false) }
+    var hasSubmitted by remember { mutableStateOf(false) }
+
     val coroutineScope = rememberCoroutineScope()
     val shakeOffset = remember { Animatable(0f) }
 
-    // If login succeeds and we are no longer loading but connection is saved (error is null)
-    // we can dismiss. Wait, the ViewModel sets isLoading to false.
-    // If error is null and we submitted, we can dismiss.
-    var hasSubmitted by remember { mutableStateOf(false) }
-    LaunchedEffect(isLoading, error) {
+    LaunchedEffect(existingInstance?.id) {
+        val instance = existingInstance ?: return@LaunchedEffect
+        label = instance.label
+        url = instance.url
+        username = instance.username.orEmpty()
+        apiKey = instance.apiKey.orEmpty()
+        fallbackUrl = instance.fallbackUrl.orEmpty()
+        password = ""
+    }
+
+    LaunchedEffect(isLoading, error, existingInstance?.id) {
         if (hasSubmitted && !isLoading) {
             if (error == null) {
-                onDismiss() // Success
+                onDismiss()
             } else {
-                // Shake animation mimicking iOS
                 coroutineScope.launch {
-                    shakeOffset.animateTo(15f, spring(stiffness = 3000f, dampingRatio = 0.3f))
-                    shakeOffset.animateTo(0f, spring(stiffness = 500f, dampingRatio = 0.5f))
+                    shakeOffset.animateTo(12f, spring(stiffness = 800f, dampingRatio = 0.7f))
+                    shakeOffset.animateTo(0f, spring(stiffness = 500f, dampingRatio = 0.8f))
                 }
             }
         }
     }
 
+    val isEditing = existingInstance != null
+    val submitLabel = if (isEditing) stringResource(R.string.login_save_instance) else stringResource(R.string.login_button)
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
@@ -99,21 +146,19 @@ fun ServiceLoginScreen(
                 .padding(paddingValues)
                 .consumeWindowInsets(paddingValues)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .imePadding()
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState())
                 .offset(x = shakeOffset.value.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.size(80.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = serviceType.name.first().toString(),
+                        text = serviceType.displayName.first().toString(),
                         style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -121,26 +166,25 @@ fun ServiceLoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = String.format(stringResource(R.string.login_title), serviceType.name.lowercase().replaceFirstChar { it.uppercase() }),
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                text = if (isEditing) stringResource(R.string.login_edit_title, serviceType.displayName) else String.format(stringResource(R.string.login_title), serviceType.displayName),
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
             )
 
             Text(
-                text = "Connettiti alla tua istanza locale",
+                text = if (isEditing) stringResource(R.string.login_edit_subtitle) else stringResource(R.string.login_create_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(36.dp))
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(24.dp))
 
-            // Hint
             val hint = when (serviceType) {
-                ServiceType.PORTAINER -> "Create an Access token in Portainer under My account -> Access tokens."
-                ServiceType.PIHOLE -> "Use the password or API token configured in Pi-hole under Settings -> API / Web interface."
-                ServiceType.GITEA -> "If 2FA is enabled, use an App Token instead of your password."
+                ServiceType.PORTAINER -> stringResource(R.string.login_hint_portainer_multi)
+                ServiceType.PIHOLE -> stringResource(R.string.login_hint_pihole_multi)
+                ServiceType.GITEA -> stringResource(R.string.login_hint_gitea_multi)
                 else -> null
             }
 
@@ -148,16 +192,21 @@ fun ServiceLoginScreen(
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
                 ) {
-                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Icon(
                             Icons.Default.Info,
-                            contentDescription = null,
+                            contentDescription = hint,
                             tint = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = hint,
                             style = MaterialTheme.typography.labelMedium,
@@ -167,23 +216,27 @@ fun ServiceLoginScreen(
                 }
             }
 
-            // Error
             AnimatedVisibility(visible = error != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
                 ) {
-                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Icon(
                             Icons.Default.Warning,
-                            contentDescription = null,
+                            contentDescription = error.orEmpty(),
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = error ?: "",
+                            text = error.orEmpty(),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -191,119 +244,170 @@ fun ServiceLoginScreen(
                 }
             }
 
-            fun doLogin() {
-                viewModel.clearError()
+            fun submit() {
                 hasSubmitted = true
+                viewModel.clearError()
                 keyboardController?.hide()
-                viewModel.authenticate(
+                viewModel.saveInstance(
                     serviceType = serviceType,
+                    label = label,
                     url = url,
                     username = username,
                     password = password,
-                    apiKey = apiKey
+                    apiKey = apiKey,
+                    fallbackUrl = fallbackUrl
                 )
             }
 
-            // URL Input
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text(stringResource(R.string.login_label)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = stringResource(R.string.login_label)) },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                shape = RoundedCornerShape(14.dp)
+            )
+
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text("URL Istanza") },
+                label = { Text(stringResource(R.string.login_instance_url)) },
                 placeholder = { Text(stringResource(R.string.login_url_hint)) },
-                leadingIcon = { Icon(Icons.Default.Language, null) },
+                leadingIcon = { Icon(Icons.Default.Language, contentDescription = stringResource(R.string.login_instance_url)) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            OutlinedTextField(
+                value = fallbackUrl,
+                onValueChange = { fallbackUrl = it },
+                label = { Text(stringResource(R.string.login_fallback_url)) },
+                leadingIcon = { Icon(Icons.Default.Language, contentDescription = stringResource(R.string.login_fallback_url)) },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
                 shape = RoundedCornerShape(14.dp)
             )
 
             if (serviceType == ServiceType.PORTAINER) {
-                // API Key for Portainer
-                OutlinedTextField(
+                SecretField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
-                    leadingIcon = { Icon(Icons.Default.Key, null) },
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            showPassword = !showPassword
-                        }) {
-                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                        }
-                    },
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { doLogin() }),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                    shape = RoundedCornerShape(14.dp)
+                    label = stringResource(R.string.login_api_key_label),
+                    showSecret = showSecret,
+                    onToggleSecret = { showSecret = !showSecret }
                 )
             } else {
                 if (serviceType != ServiceType.PIHOLE) {
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text(if (serviceType == ServiceType.BESZEL) "Email" else stringResource(R.string.login_username_hint)) },
-                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        label = { Text(if (serviceType == ServiceType.BESZEL) stringResource(R.string.login_email_label) else stringResource(R.string.login_username_label)) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = if (serviceType == ServiceType.BESZEL) stringResource(R.string.login_email_label) else stringResource(R.string.login_username_label)) },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = if (serviceType == ServiceType.BESZEL) KeyboardType.Email else KeyboardType.Text,
                             imeAction = ImeAction.Next
                         ),
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp),
                         shape = RoundedCornerShape(14.dp)
                     )
                 }
 
-                OutlinedTextField(
+                SecretField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(stringResource(R.string.login_password_hint)) },
-                    leadingIcon = { Icon(Icons.Default.Lock, null) },
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                        }
-                    },
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { doLogin() }),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                    shape = RoundedCornerShape(14.dp)
+                    label = stringResource(R.string.login_password_hint),
+                    showSecret = showSecret,
+                    onToggleSecret = { showSecret = !showSecret },
+                    placeholder = if (isEditing) stringResource(R.string.login_keep_secret_placeholder) else null
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
 
-            val btnInteractionSource = remember { MutableInteractionSource() }
-            val btnIsPressed by btnInteractionSource.collectIsPressedAsState()
-            val btnScale by animateFloatAsState(
-                targetValue = if (btnIsPressed) 0.95f else 1f,
-                animationSpec = spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy, stiffness = androidx.compose.animation.core.Spring.StiffnessLow),
-                label = "BouncyButton"
+            val interactionSource = remember { MutableInteractionSource() }
+            val isPressed by interactionSource.collectIsPressedAsState()
+            val scale by animateFloatAsState(
+                targetValue = if (isPressed) 0.95f else 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessLow
+                ),
+                label = "login_submit"
             )
 
             Button(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    doLogin()
+                    submit()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .scale(btnScale),
-                interactionSource = btnInteractionSource,
+                    .padding(bottom = 24.dp),
+                interactionSource = interactionSource,
                 shape = RoundedCornerShape(14.dp),
                 enabled = !isLoading
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
                 } else {
-                    Text(stringResource(R.string.login_button), style = MaterialTheme.typography.titleMedium)
+                    Text(submitLabel, style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SecretField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    showSecret: Boolean,
+    onToggleSecret: () -> Unit,
+    placeholder: String? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        leadingIcon = { Icon(Icons.Default.Key, contentDescription = label) },
+        trailingIcon = {
+            IconButton(onClick = onToggleSecret) {
+                Icon(
+                    if (showSecret) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = stringResource(if (showSecret) R.string.login_hide_secret else R.string.login_show_secret)
+                )
+            }
+        },
+        visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp),
+        shape = RoundedCornerShape(14.dp)
+    )
 }

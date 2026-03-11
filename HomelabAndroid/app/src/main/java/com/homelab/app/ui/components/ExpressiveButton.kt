@@ -34,7 +34,7 @@ fun M3ExpressiveButtonCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
         label = "BouncyScale"
     )
     val haptic = LocalHapticFeedback.current
@@ -59,7 +59,7 @@ fun M3ExpressiveButtonCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = text, tint = color, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = text, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = color)
         }

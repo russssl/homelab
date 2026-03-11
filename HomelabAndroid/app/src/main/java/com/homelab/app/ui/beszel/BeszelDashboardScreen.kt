@@ -8,8 +8,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +44,7 @@ import com.homelab.app.util.ServiceType
 import com.homelab.app.util.ResourceFormatters
 import com.homelab.app.util.UiState
 import com.homelab.app.ui.common.ErrorScreen
+import com.homelab.app.ui.components.ServiceInstancePicker
 import java.text.NumberFormat
 import java.util.*
 
@@ -49,10 +52,12 @@ import java.util.*
 @Composable
 fun BeszelDashboardScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToInstance: (String) -> Unit,
     onNavigateToSystem: (String) -> Unit,
     viewModel: BeszelViewModel = hiltViewModel()
 ) {
     val systemsState by viewModel.systemsState.collectAsStateWithLifecycle()
+    val instances by viewModel.instances.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.fetchSystems()
@@ -99,40 +104,52 @@ fun BeszelDashboardScreen(
             }
             is UiState.Success -> {
                 val systems = state.data
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(1),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    item {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ServiceInstancePicker(
+                            instances = instances,
+                            selectedInstanceId = viewModel.instanceId,
+                            onInstanceSelected = { instance ->
+                                viewModel.setPreferredInstance(instance.id)
+                                onNavigateToInstance(instance.id)
+                            }
+                        )
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         OverviewCard(systems = systems)
                     }
 
-                    item {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             modifier = Modifier.padding(horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(stringResource(R.string.beszel_background_update_info), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
 
                     if (systems.isEmpty()) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Icon(Icons.Default.Dns, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.Default.Dns, contentDescription = stringResource(R.string.beszel_no_systems), modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(stringResource(R.string.beszel_no_systems), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
                     } else {
-                        items(systems.size, key = { systems[it].id }) { idx ->
-                            val sys = systems[idx]
+                        items(systems, key = { it.id }) { sys ->
                             SystemCard(system = sys, onClick = { onNavigateToSystem(sys.id) })
                         }
                     }
@@ -162,7 +179,7 @@ private fun OverviewCard(systems: List<BeszelSystem>) {
                 color = beszelColor.copy(alpha = 0.1f),
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.Dns, contentDescription = null, tint = beszelColor, modifier = Modifier.padding(12.dp))
+                Icon(Icons.Default.Dns, contentDescription = stringResource(R.string.beszel_monitored_servers), tint = beszelColor, modifier = Modifier.padding(12.dp))
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column {
@@ -195,7 +212,7 @@ private fun SystemCard(system: BeszelSystem, onClick: () -> Unit) {
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
         label = "BouncyScale"
     )
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -228,11 +245,11 @@ private fun SystemCard(system: BeszelSystem, onClick: () -> Unit) {
                         color = statusColor.copy(alpha = 0.1f)
                     ) {
                         Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (isUp) Icons.Default.Wifi else Icons.Default.WifiOff, contentDescription = null, modifier = Modifier.size(12.dp), tint = statusColor)
+                            Icon(if (isUp) Icons.Default.Wifi else Icons.Default.WifiOff, contentDescription = stringResource(if (isUp) R.string.home_status_online else R.string.home_status_offline), modifier = Modifier.size(12.dp), tint = statusColor)
                             Text(if (isUp) stringResource(R.string.home_status_online) else stringResource(R.string.home_status_offline), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = statusColor)
                         }
                     }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.beszel_system_details), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                 }
             }
 
@@ -260,7 +277,7 @@ private fun SystemCard(system: BeszelSystem, onClick: () -> Unit) {
 private fun MetricBar(icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, label: String, value: Double, barColor: Color) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = iconColor)
+            Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp), tint = iconColor)
             Spacer(modifier = Modifier.width(6.dp))
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.weight(1f))
@@ -286,7 +303,7 @@ private fun MetricBar(icon: androidx.compose.ui.graphics.vector.ImageVector, ico
 private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, text: String) {
     Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(10.dp), tint = iconColor)
+            Icon(icon, contentDescription = text, modifier = Modifier.size(10.dp), tint = iconColor)
             Text(text, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -295,7 +312,7 @@ private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, icon
 @Composable
 private fun NetworkLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(12.dp), tint = color)
+        Icon(icon, contentDescription = text, modifier = Modifier.size(12.dp), tint = color)
         Text(text, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -5,14 +5,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-import kotlinx.serialization.Serializable
-
 @Singleton
 class GlobalEventBus @Inject constructor() {
-    private val _authErrors = MutableSharedFlow<ServiceType>(extraBufferCapacity = 1)
+    private val _authErrors = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val authErrors = _authErrors.asSharedFlow()
 
-    fun emitAuthError(serviceType: ServiceType) {
-        _authErrors.tryEmit(serviceType)
+    fun emitAuthError(instanceId: String) {
+        _authErrors.tryEmit(instanceId)
     }
 }

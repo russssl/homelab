@@ -8,8 +8,8 @@ struct SettingsView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(Localizer.self) private var localizer
 
-    @State private var fallbackInputs: [ServiceType: String] = [:]
-    @State private var showDisconnectAlert: ServiceType? = nil
+    @State private var showDeleteInstance: ServiceInstance? = nil
+    @State private var showInstanceEditor: ServiceEditorContext? = nil
     @State private var showCopiedToast = false
     @State private var showDisableSecurityAlert = false
     @State private var showChangePinFlow = false
@@ -17,8 +17,6 @@ struct SettingsView: View {
     @State private var currentPinInput = ""
     @State private var newPinInput = ""
     @State private var changePinError: String? = nil
-    @FocusState private var focusedField: ServiceType?
-
     private let cryptoAddress = "0x649641868e6876c2c1f04584a95679e01c1aaf0d"
 
     var body: some View {
@@ -53,19 +51,16 @@ struct SettingsView: View {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
                         Button(localizer.t.confirm) {
-                            focusedField = nil
                             endEditing()
                         }
-                    }
-                }
-                .onChange(of: focusedField) { oldValue, newValue in
-                    if let old = oldValue, newValue != old {
-                        saveFallback(for: old)
                     }
                 }
             }
             .onTapGesture { endEditing() }
             .navigationBarHidden(true)
+        }
+        .sheet(item: $showInstanceEditor) { context in
+            ServiceLoginView(serviceType: context.serviceType, existingInstanceId: context.instanceId)
         }
         .overlay(alignment: .bottom) {
             if showCopiedToast {
@@ -187,30 +182,32 @@ struct SettingsView: View {
                 .padding(.leading, 8)
                 .padding(.top, 16)
 
-            VStack(spacing: 0) {
-                let services = ServiceType.allCases
-                ForEach(Array(services.enumerated()), id: \.element.id) { index, type in
-                    serviceRow(type)
-                    if index < services.count - 1 {
-                        Divider().padding(.horizontal, 16)
-                    }
+            VStack(spacing: 16) {
+                ForEach(settingsStore.serviceOrder) { type in
+                    serviceSection(type)
                 }
             }
-            .glassCard()
         }
-        .alert(localizer.t.settingsDisconnectConfirm, isPresented: .init(
-            get: { showDisconnectAlert != nil },
-            set: { if !$0 { showDisconnectAlert = nil } }
+        .alert(localizer.t.settingsDeleteInstanceTitle, isPresented: .init(
+            get: { showDeleteInstance != nil },
+            set: { if !$0 { showDeleteInstance = nil } }
         )) {
             Button(localizer.t.cancel, role: .cancel) { }
-            Button(localizer.t.settingsDisconnect, role: .destructive) {
-                if let type = showDisconnectAlert {
+            Button(localizer.t.delete, role: .destructive) {
+                if let instance = showDeleteInstance {
                     HapticManager.medium()
-                    servicesStore.disconnectService(type)
+                    servicesStore.deleteInstance(id: instance.id)
                 }
             }
         } message: {
-            Text(localizer.t.settingsDisconnectMessage)
+            Text(
+                [
+                    showDeleteInstance?.displayLabel ?? "",
+                    localizer.t.settingsDeleteInstanceMessage
+                ]
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            )
         }
     }
 
@@ -224,11 +221,11 @@ struct SettingsView: View {
                 .padding(.top, 16)
 
             VStack(spacing: 0) {
-                ContactRow(title: "Telegram", icon: "paperplane.fill", url: "https://t.me/finalyxre", color: Color(hex: "#26A5E4"))
+                ContactRow(title: localizer.t.settingsContactTelegram, icon: "paperplane.fill", url: "https://t.me/finalyxre", color: Color(hex: "#26A5E4"))
                 Divider().padding(.horizontal, 16)
-                ContactRow(title: "Reddit", icon: "bubble.left.and.bubble.right.fill", url: "https://www.reddit.com/user/finalyxre/", color: Color(hex: "#FF4500"))
+                ContactRow(title: localizer.t.settingsContactReddit, icon: "bubble.left.and.bubble.right.fill", url: "https://www.reddit.com/user/finalyxre/", color: Color(hex: "#FF4500"))
                 Divider().padding(.horizontal, 16)
-                ContactRow(title: "GitHub", icon: "terminal.fill", url: "https://github.com/JohnnWi/homelab-project", color: .primary)
+                ContactRow(title: localizer.t.settingsContactGithub, icon: "terminal.fill", url: "https://github.com/JohnnWi/homelab-project", color: .primary)
             }
             .glassCard()
         }
@@ -251,7 +248,7 @@ struct SettingsView: View {
                 if settingsStore.isPinSet {
                     let context = LAContext()
                     let canUseBiometric = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
-                    let biometricLabel = context.biometryType == .faceID ? "Face ID" : "Touch ID"
+                    let biometricLabel = context.biometryType == .faceID ? localizer.t.securityFaceId : localizer.t.securityTouchId
 
                     if canUseBiometric {
                         HStack {
@@ -259,6 +256,7 @@ struct SettingsView: View {
                                 .font(.title3)
                                 .foregroundStyle(AppTheme.accent)
                                 .frame(width: 32, height: 32)
+                                .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(biometricLabel)
@@ -305,6 +303,7 @@ struct SettingsView: View {
                             Image(systemName: "chevron.right")
                                 .font(.caption.bold())
                                 .foregroundStyle(AppTheme.textMuted)
+                                .accessibilityHidden(true)
                         }
                         .padding(16)
                         .contentShape(Rectangle())
@@ -340,6 +339,7 @@ struct SettingsView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                             .frame(width: 32, height: 32)
+                            .accessibilityHidden(true)
 
                         Text(localizer.t.securityNotConfigured)
                             .font(.body)
@@ -383,6 +383,7 @@ struct SettingsView: View {
                             .foregroundStyle(.primary)
                             .padding(12)
                     }
+                    .accessibilityLabel(localizer.t.close)
                     .buttonStyle(.plain)
                     Spacer()
                 }
@@ -457,10 +458,9 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     @ViewBuilder
-    private func serviceRow(_ type: ServiceType) -> some View {
-        let connected = servicesStore.isConnected(type)
-        let conn = servicesStore.connection(for: type)
-
+    private func serviceSection(_ type: ServiceType) -> some View {
+        let instances = servicesStore.instances(for: type)
+        let preferredId = servicesStore.preferredInstance(for: type)?.id
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Text(String(type.displayName.prefix(1)))
@@ -472,20 +472,26 @@ struct SettingsView: View {
                     .glassCard(cornerRadius: 10)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(type.displayName)
-                        .font(.body)
-                        .fontWeight(.bold)
-
-                    if connected {
-                        Text(conn?.url ?? "")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Text(localizer.t.settingsNotConnected)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(type.displayName)
+                            .font(.body)
+                            .fontWeight(.bold)
+                        if settingsStore.isServiceHidden(type) {
+                            Text(localizer.t.settingsHiddenBadge)
+                                .font(.caption2.bold())
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                        }
                     }
+                    Text(
+                        instances.isEmpty
+                            ? localizer.t.settingsNotConnected
+                            : "\(instances.count) \(instances.count == 1 ? localizer.t.settingsInstanceSingular : localizer.t.settingsInstancePlural)"
+                    )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
@@ -502,49 +508,135 @@ struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(settingsStore.isServiceHidden(type) ? localizer.t.settingsShowService : localizer.t.settingsHideService)
 
-                if connected {
-                    Button {
-                        showDisconnectAlert = type
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.forward")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.danger)
-                            .frame(width: 32, height: 32)
-                            .background(AppTheme.danger.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Circle()
-                        .fill(.secondary.opacity(0.3))
-                        .frame(width: 8, height: 8)
+                HStack(spacing: 6) {
+                Button {
+                    settingsStore.moveService(type, offset: -1)
+                    HapticManager.light()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.caption.bold())
+                        .foregroundStyle(settingsStore.canMoveService(type, offset: -1) ? AppTheme.accent : .secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.secondary.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(localizer.t.settingsMoveUp)
+                .disabled(!settingsStore.canMoveService(type, offset: -1))
+
+                Button {
+                    settingsStore.moveService(type, offset: 1)
+                    HapticManager.light()
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(.caption.bold())
+                        .foregroundStyle(settingsStore.canMoveService(type, offset: 1) ? AppTheme.accent : .secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.secondary.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(localizer.t.settingsMoveDown)
+                .disabled(!settingsStore.canMoveService(type, offset: 1))
+            }
             }
 
-            if connected {
-                HStack {
-                    Image(systemName: "link")
-                        .font(.caption2)
+            if instances.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle")
                         .foregroundStyle(.secondary)
-
-                    TextField(localizer.t.settingsFallbackUrl, text: fallbackBinding(for: type, current: conn?.fallbackUrl))
-                        .font(.caption)
-                        .focused($focusedField, equals: type)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .onSubmit { saveFallback(for: type) }
+                    Text(localizer.t.settingsNoInstances)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                )
+                .padding(.vertical, 14)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach(instances) { instance in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 8) {
+                                    Text(instance.displayLabel)
+                                        .font(.subheadline.weight(.semibold))
+                                    if preferredId == instance.id {
+                                        Text(localizer.t.badgeDefault)
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(type.colors.primary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(type.colors.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    }
+                                }
+                                Text(instance.url)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                if let fallback = instance.fallbackUrl, !fallback.isEmpty {
+                                    Text("\(localizer.t.settingsFallbackPrefix): \(fallback)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            Spacer()
+                        }
+
+                        HStack(spacing: 8) {
+                            if preferredId != instance.id {
+                                Button(localizer.t.settingsSetDefault) {
+                                    HapticManager.light()
+                                    servicesStore.setPreferredInstance(id: instance.id, for: type)
+                                }
+                                .font(.caption.bold())
+                                .buttonStyle(.bordered)
+                            }
+
+                            Button(localizer.t.actionEdit) {
+                                showInstanceEditor = ServiceEditorContext(serviceType: type, instanceId: instance.id)
+                            }
+                            .font(.caption.bold())
+                            .buttonStyle(.bordered)
+                            .tint(type.colors.primary)
+
+                            Button(localizer.t.delete, role: .destructive) {
+                                showDeleteInstance = instance
+                            }
+                            .font(.caption.bold())
+                            .buttonStyle(.bordered)
+
+                            Spacer()
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
             }
+
+            Button {
+                showInstanceEditor = ServiceEditorContext(serviceType: type, instanceId: nil)
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text(localizer.t.settingsAddInstance)
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .foregroundStyle(type.colors.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(type.colors.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
+        .glassCard()
     }
 
     private func themeLabel(_ mode: ThemeMode) -> String {
@@ -555,24 +647,21 @@ struct SettingsView: View {
         }
     }
 
-    private func fallbackBinding(for type: ServiceType, current: String?) -> Binding<String> {
-        Binding(
-            get: { fallbackInputs[type] ?? current ?? "" },
-            set: { fallbackInputs[type] = $0 }
-        )
-    }
-
-    private func saveFallback(for type: ServiceType) {
-        let value = (fallbackInputs[type] ?? "").trimmingCharacters(in: .whitespaces)
-        Task { await servicesStore.updateFallbackURL(for: type, fallbackUrl: value) }
-        HapticManager.light()
-    }
 }
 
 // MARK: - ChangePinStep
 
 enum ChangePinStep {
     case currentPin, newPin, confirmNewPin
+}
+
+private struct ServiceEditorContext: Identifiable {
+    let serviceType: ServiceType
+    let instanceId: UUID?
+
+    var id: String {
+        "\(serviceType.rawValue)-\(instanceId?.uuidString ?? "new")"
+    }
 }
 
 // MARK: - Subviews
@@ -606,6 +695,7 @@ struct ContactRow: View {
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textMuted)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

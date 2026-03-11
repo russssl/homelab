@@ -31,7 +31,7 @@ fun ErrorScreen(
     ) {
         Icon(
             imageVector = if (isOffline) Icons.Default.WifiOff else Icons.Default.CloudOff,
-            contentDescription = null,
+            contentDescription = stringResource(R.string.error),
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.error
         )
@@ -39,7 +39,7 @@ fun ErrorScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            text = if (isOffline) stringResource(R.string.error_network) else stringResource(R.string.pihole_blocking_disabled_desc).replace("DNS protection is", "Service is"),
+            text = if (isOffline) stringResource(R.string.error_network) else stringResource(R.string.error_service_unavailable),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -61,7 +61,7 @@ fun ErrorScreen(
             onClick = onRetry,
             contentPadding = PaddingValues(horizontal = 32.dp, vertical = 12.dp)
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = null)
+            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.retry))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.retry),

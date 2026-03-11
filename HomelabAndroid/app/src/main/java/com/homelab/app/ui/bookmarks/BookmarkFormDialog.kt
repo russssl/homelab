@@ -164,7 +164,7 @@ fun BookmarkFormDialog(
                             )
                             Icon(
                                 imageVector = if (categoryMenuExpanded) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                contentDescription = null
+                                contentDescription = stringResource(R.string.bookmark_category)
                             )
                         }
                         DropdownMenu(
@@ -218,10 +218,11 @@ fun BookmarkFormDialog(
                             FallbackRemoteIcon(
                                 urls = faviconCandidates,
                                 modifier = Modifier.size(36.dp),
+                                contentDescription = stringResource(R.string.preview),
                                 loading = {
                                     Icon(
                                         Icons.Default.Language,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(R.string.preview),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -229,7 +230,7 @@ fun BookmarkFormDialog(
                                 fallback = {
                                     Icon(
                                         Icons.Default.Language,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(R.string.preview),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -283,7 +284,7 @@ fun BookmarkFormDialog(
                                     error = {
                                         Icon(
                                             Icons.Default.Warning,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.warning),
                                             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                                             modifier = Modifier.size(24.dp)
                                         )
@@ -322,7 +323,7 @@ fun BookmarkFormDialog(
                                     error = {
                                         Icon(
                                             Icons.Default.Image,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.preview),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(24.dp)
                                         )
@@ -394,7 +395,7 @@ fun BookmarkFormDialog(
     if (showDeleteConfirm && bookmark != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            icon = { Icon(Icons.Default.Warning, contentDescription = stringResource(R.string.warning), tint = MaterialTheme.colorScheme.error) },
             title = { Text(stringResource(R.string.delete)) },
             text = { Text(stringResource(R.string.bookmark_delete_confirm)) },
             confirmButton = {

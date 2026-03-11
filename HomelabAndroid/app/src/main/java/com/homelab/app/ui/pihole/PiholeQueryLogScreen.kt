@@ -40,12 +40,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.homelab.app.R
 import com.homelab.app.data.remote.dto.pihole.PiholeQueryLogEntry
 import com.homelab.app.ui.theme.StatusBlue
@@ -56,6 +59,7 @@ import com.homelab.app.util.ServiceType
 import com.homelab.app.util.UiState
 import com.homelab.app.ui.common.ErrorScreen
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -105,10 +109,13 @@ fun PiholeQueryLogScreen(
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(Unit) {
-        while (true) {
-            viewModel.fetchRecentQueries()
-            delay(5000)
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                viewModel.fetchRecentQueries()
+                delay(10_000L)
+            }
         }
     }
 

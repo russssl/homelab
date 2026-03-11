@@ -253,13 +253,15 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(system.id, "sys001")
         XCTAssertEqual(system.name, "homeserver")
         XCTAssertTrue(system.isOnline)
-        XCTAssertEqual(system.info.cpu, 23.5, accuracy: 0.01)
-        XCTAssertEqual(system.info.mp, 45.2, accuracy: 0.01)
-        XCTAssertEqual(system.info.m, 3.6, accuracy: 0.01)
-        XCTAssertEqual(system.info.mt, 7.8, accuracy: 0.01)
-        XCTAssertEqual(system.info.c, 12)
-        XCTAssertEqual(system.info.os, "Ubuntu 24.04")
-        XCTAssertEqual(system.info.cm, "Intel i7-12700")
+        XCTAssertNotNil(system.info)
+        let info = try XCTUnwrap(system.info)
+        XCTAssertEqual(try XCTUnwrap(info.cpu), 23.5, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(info.mp), 45.2, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(info.m), 3.6, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(info.mt), 7.8, accuracy: 0.01)
+        XCTAssertEqual(info.c, 12)
+        XCTAssertEqual(info.os, "Ubuntu 24.04")
+        XCTAssertEqual(info.cm, "Intel i7-12700")
     }
 
     func testBeszelSystemOffline() throws {
@@ -295,10 +297,10 @@ final class ModelDecodingTests: XCTestCase {
         """.data(using: .utf8)!
 
         let record = try JSONDecoder().decode(BeszelSystemRecord.self, from: json)
-        XCTAssertEqual(record.stats.cpu, 35.2, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(record.stats.cpu), 35.2, accuracy: 0.01)
         XCTAssertEqual(record.stats.dc?.count, 2)
         XCTAssertEqual(record.stats.dc?.first?.name, "nginx")
-        XCTAssertEqual(record.stats.dc?.last?.m, 200.3, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(record.stats.dc?.last?.m), 200.3, accuracy: 0.01)
     }
 
     // MARK: - Gitea
@@ -508,5 +510,45 @@ final class ModelDecodingTests: XCTestCase {
 
         let conn2 = ServiceConnection(type: .pihole, url: "https://pihole.local", token: "sid123", fallbackUrl: "https://pihole.backup")
         XCTAssertEqual(conn2.fallbackUrl, "https://pihole.backup")
+    }
+
+    func testServiceInstanceEncoding() throws {
+        let instance = ServiceInstance(
+            id: UUID(uuidString: "30000000-0000-0000-0000-000000000001")!,
+            type: .portainer,
+            label: "Portainer Lab",
+            url: "https://portainer.lab/",
+            token: "jwt123",
+            apiKey: "key456",
+            fallbackUrl: "https://portainer.example.com/"
+        )
+
+        let data = try JSONEncoder().encode(instance)
+        let decoded = try JSONDecoder().decode(ServiceInstance.self, from: data)
+
+        XCTAssertEqual(decoded.id, instance.id)
+        XCTAssertEqual(decoded.type, .portainer)
+        XCTAssertEqual(decoded.label, "Portainer Lab")
+        XCTAssertEqual(decoded.url, "https://portainer.lab")
+        XCTAssertEqual(decoded.apiKey, "key456")
+        XCTAssertEqual(decoded.fallbackUrl, "https://portainer.example.com")
+    }
+
+    func testLegacyServiceConnectionMigrationUsesDisplayNameLabel() {
+        let connection = ServiceConnection(
+            type: .beszel,
+            url: "https://beszel.local",
+            token: "token-1",
+            username: "ops@example.com"
+        )
+
+        let migrated = connection.migratedInstance(id: UUID(uuidString: "30000000-0000-0000-0000-000000000002")!)
+
+        XCTAssertEqual(migrated.id.uuidString, "30000000-0000-0000-0000-000000000002")
+        XCTAssertEqual(migrated.type, .beszel)
+        XCTAssertEqual(migrated.label, ServiceType.beszel.displayName)
+        XCTAssertEqual(migrated.url, "https://beszel.local")
+        XCTAssertEqual(migrated.token, "token-1")
+        XCTAssertEqual(migrated.username, "ops@example.com")
     }
 }

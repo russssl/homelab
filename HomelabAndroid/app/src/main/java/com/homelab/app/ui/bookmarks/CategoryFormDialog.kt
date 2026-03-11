@@ -200,7 +200,7 @@ fun CategoryFormDialog(
     if (showDeleteConfirm && category != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            icon = { Icon(Icons.Default.Warning, contentDescription = stringResource(R.string.warning), tint = MaterialTheme.colorScheme.error) },
             title = { Text(stringResource(R.string.category_delete)) },
             text = { Text(stringResource(R.string.category_delete_confirm)) },
             confirmButton = {
@@ -238,7 +238,12 @@ private fun RowPreviewIcon(icon: String, color: String?) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(imageVector = vector, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = vector,
+                contentDescription = stringResource(R.string.category_icon),
+                tint = tint,
+                modifier = Modifier.size(18.dp)
+            )
             Box(
                 modifier = Modifier
                     .size(10.dp)

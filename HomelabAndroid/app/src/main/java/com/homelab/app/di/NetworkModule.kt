@@ -1,5 +1,6 @@
 package com.homelab.app.di
 
+import com.homelab.app.BuildConfig
 import com.homelab.app.data.remote.AuthInterceptor
 import com.homelab.app.data.remote.SmartFallbackInterceptor
 import dagger.Module
@@ -34,7 +35,11 @@ object NetworkModule {
         authInterceptor: AuthInterceptor
     ): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY // TODO: Ridurre a BASIC in produzione
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.BASIC
+            }
         }
 
         return OkHttpClient.Builder()

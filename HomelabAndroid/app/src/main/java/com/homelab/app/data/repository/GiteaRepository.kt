@@ -53,37 +53,37 @@ class GiteaRepository @Inject constructor(
         }
     }
 
-    suspend fun getCurrentUser(): GiteaUser = api.getCurrentUser()
-    suspend fun getUserRepos(page: Int = 1, limit: Int = 20): List<GiteaRepo> = api.getUserRepos(page = page, limit = limit)
-    suspend fun getOrgs(): List<GiteaOrg> = api.getOrgs()
-    suspend fun getNotifications(limit: Int = 20): List<GiteaNotification> = api.getNotifications(limit = limit)
-    suspend fun getUserHeatmap(username: String): List<GiteaHeatmapItem> = api.getUserHeatmap(username = username)
-    suspend fun getRepo(owner: String, repo: String): GiteaRepo = api.getRepo(owner = owner, repo = repo)
+    suspend fun getCurrentUser(instanceId: String): GiteaUser = api.getCurrentUser(instanceId = instanceId)
+    suspend fun getUserRepos(instanceId: String, page: Int = 1, limit: Int = 20): List<GiteaRepo> = api.getUserRepos(instanceId = instanceId, page = page, limit = limit)
+    suspend fun getOrgs(instanceId: String): List<GiteaOrg> = api.getOrgs(instanceId = instanceId)
+    suspend fun getNotifications(instanceId: String, limit: Int = 20): List<GiteaNotification> = api.getNotifications(instanceId = instanceId, limit = limit)
+    suspend fun getUserHeatmap(instanceId: String, username: String): List<GiteaHeatmapItem> = api.getUserHeatmap(instanceId = instanceId, username = username)
+    suspend fun getRepo(instanceId: String, owner: String, repo: String): GiteaRepo = api.getRepo(instanceId = instanceId, owner = owner, repo = repo)
     
 
-    suspend fun getRepoContents(owner: String, repo: String, path: String = "", ref: String? = null): List<GiteaFileContent> {
+    suspend fun getRepoContents(instanceId: String, owner: String, repo: String, path: String = "", ref: String? = null): List<GiteaFileContent> {
         return if (path.isEmpty()) {
-            api.getRepoRootContents(owner = owner, repo = repo, ref = ref)
+            api.getRepoRootContents(instanceId = instanceId, owner = owner, repo = repo, ref = ref)
         } else {
-            api.getRepoContents(owner = owner, repo = repo, path = path, ref = ref)
+            api.getRepoContents(instanceId = instanceId, owner = owner, repo = repo, path = path, ref = ref)
         }
     }
 
-    suspend fun getFileContent(owner: String, repo: String, path: String, ref: String? = null): GiteaFileContent {
-        return api.getFileContent(owner = owner, repo = repo, path = path, ref = ref)
+    suspend fun getFileContent(instanceId: String, owner: String, repo: String, path: String, ref: String? = null): GiteaFileContent {
+        return api.getFileContent(instanceId = instanceId, owner = owner, repo = repo, path = path, ref = ref)
     }
 
-    suspend fun getRepoCommits(owner: String, repo: String, page: Int = 1, limit: Int = 20, ref: String? = null): List<GiteaCommit> {
-        return api.getRepoCommits(owner = owner, repo = repo, page = page, limit = limit, ref = ref)
+    suspend fun getRepoCommits(instanceId: String, owner: String, repo: String, page: Int = 1, limit: Int = 20, ref: String? = null): List<GiteaCommit> {
+        return api.getRepoCommits(instanceId = instanceId, owner = owner, repo = repo, page = page, limit = limit, ref = ref)
     }
 
-    suspend fun getRepoIssues(owner: String, repo: String, state: String = "open", page: Int = 1, limit: Int = 20): List<GiteaIssue> {
-        return api.getRepoIssues(owner = owner, repo = repo, state = state, page = page, limit = limit)
+    suspend fun getRepoIssues(instanceId: String, owner: String, repo: String, state: String = "open", page: Int = 1, limit: Int = 20): List<GiteaIssue> {
+        return api.getRepoIssues(instanceId = instanceId, owner = owner, repo = repo, state = state, page = page, limit = limit)
     }
 
-    suspend fun getRepoBranches(owner: String, repo: String): List<GiteaBranch> = api.getRepoBranches(owner = owner, repo = repo)
+    suspend fun getRepoBranches(instanceId: String, owner: String, repo: String): List<GiteaBranch> = api.getRepoBranches(instanceId = instanceId, owner = owner, repo = repo)
     
-    suspend fun getRepoReadme(owner: String, repo: String, ref: String? = null): GiteaFileContent {
-        return api.getFileContent(owner = owner, repo = repo, path = "README.md", ref = ref)
+    suspend fun getRepoReadme(instanceId: String, owner: String, repo: String, ref: String? = null): GiteaFileContent {
+        return api.getFileContent(instanceId = instanceId, owner = owner, repo = repo, path = "README.md", ref = ref)
     }
 }

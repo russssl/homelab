@@ -3,6 +3,7 @@ import SwiftUI
 // Maps to app/portainer/[containerId].tsx
 
 struct ContainerDetailView: View {
+    let instanceId: UUID
     let endpointId: Int
     let containerId: String
 
@@ -98,9 +99,11 @@ struct ContainerDetailView: View {
                         } label: {
                             Image(systemName: "checkmark").foregroundStyle(AppTheme.running)
                         }
+                        .accessibilityLabel(localizer.t.confirm)
                         Button { isEditing = false } label: {
                             Image(systemName: "xmark").foregroundStyle(AppTheme.stopped)
                         }
+                        .accessibilityLabel(localizer.t.cancel)
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -116,6 +119,7 @@ struct ContainerDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textMuted)
                         }
+                        .accessibilityLabel(localizer.t.actionEdit)
                     }
                 }
                 Spacer()
@@ -160,7 +164,10 @@ struct ContainerDetailView: View {
             HapticManager.medium()
             Task {
                 do {
-                    try await servicesStore.portainerClient.containerAction(endpointId: endpointId, containerId: containerId, action: action)
+                    guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                        throw APIError.notConfigured
+                    }
+                    try await client.containerAction(endpointId: endpointId, containerId: containerId, action: action)
                     HapticManager.success()
                     await fetchDetail()
                 } catch {
@@ -190,7 +197,10 @@ struct ContainerDetailView: View {
             HapticManager.medium()
             Task {
                 do {
-                    try await servicesStore.portainerClient.removeContainer(endpointId: endpointId, containerId: containerId, force: true)
+                    guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                        throw APIError.notConfigured
+                    }
+                    try await client.removeContainer(endpointId: endpointId, containerId: containerId, force: true)
                     HapticManager.success()
                 } catch {
                     HapticManager.error()
@@ -281,7 +291,7 @@ struct ContainerDetailView: View {
                 Text(localizer.t.detailContainer)
                     .font(.subheadline.weight(.semibold))
                     .padding(.bottom, 4)
-                infoRow(label: "ID", value: String(detail.Id.prefix(12)))
+                infoRow(label: localizer.t.detailId, value: String(detail.Id.prefix(12)))
                 infoRow(label: localizer.t.detailCreated, value: Formatters.formatDate(detail.Created))
                 infoRow(label: localizer.t.detailHostname, value: detail.Config.Hostname)
                 if let workDir = detail.Config.WorkingDir, !workDir.isEmpty {
@@ -460,7 +470,7 @@ struct ContainerDetailView: View {
                             Image(systemName: "arrow.down")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.running)
-                            Text("RX")
+                            Text(localizer.t.detailRx)
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                             Text(Formatters.formatBytes(Double(rx)))
@@ -474,7 +484,7 @@ struct ContainerDetailView: View {
                             Image(systemName: "arrow.up")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.info)
-                            Text("TX")
+                            Text(localizer.t.detailTx)
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                             Text(Formatters.formatBytes(Double(tx)))
@@ -634,23 +644,27 @@ struct ContainerDetailView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            detail = try await servicesStore.portainerClient.getContainerDetail(endpointId: endpointId, containerId: containerId)
+            guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            detail = try await client.getContainerDetail(endpointId: endpointId, containerId: containerId)
         } catch {
             // silent
         }
     }
 
     private func fetchTabData(_ tab: TabType) async {
+        guard let client = await servicesStore.portainerClient(instanceId: instanceId) else { return }
         switch tab {
         case .stats:
-            do { stats = try await servicesStore.portainerClient.getContainerStats(endpointId: endpointId, containerId: containerId) } catch {}
+            do { stats = try await client.getContainerStats(endpointId: endpointId, containerId: containerId) } catch {}
         case .logs:
-            do { logs = try await servicesStore.portainerClient.getContainerLogs(endpointId: endpointId, containerId: containerId, tail: 200) } catch {}
+            do { logs = try await client.getContainerLogs(endpointId: endpointId, containerId: containerId, tail: 200) } catch {}
         case .compose:
             do {
-                stacks = try await servicesStore.portainerClient.getStacks(endpointId: endpointId)
+                stacks = try await client.getStacks(endpointId: endpointId)
                 if let stack = matchedStack {
-                    let file = try await servicesStore.portainerClient.getStackFile(stackId: stack.Id)
+                    let file = try await client.getStackFile(stackId: stack.Id)
                     stackFile = file
                     if !composeEdited { composeContent = file }
                 }
@@ -666,7 +680,10 @@ struct ContainerDetailView: View {
 
     private func renameContainer(_ newName: String) async {
         do {
-            try await servicesStore.portainerClient.renameContainer(endpointId: endpointId, containerId: containerId, newName: newName)
+            guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            try await client.renameContainer(endpointId: endpointId, containerId: containerId, newName: newName)
             HapticManager.success()
             await fetchDetail()
         } catch {
@@ -680,7 +697,10 @@ struct ContainerDetailView: View {
         isSavingCompose = true
         defer { isSavingCompose = false }
         do {
-            try await servicesStore.portainerClient.updateStackFile(stackId: stack.Id, endpointId: endpointId, stackFileContent: composeContent)
+            guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            try await client.updateStackFile(stackId: stack.Id, endpointId: endpointId, stackFileContent: composeContent)
             HapticManager.success()
             composeEdited = false
         } catch {

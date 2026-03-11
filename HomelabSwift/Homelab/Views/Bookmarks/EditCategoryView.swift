@@ -63,6 +63,8 @@ struct EditCategoryView: View {
                                     Circle()
                                         .fill(icon == iconName ? (selectedColor.isEmpty ? .primary : Color(hex: selectedColor)) : Color.clear)
                                 )
+                                .accessibilityLabel(iconName)
+                                .accessibilityAddTraits(.isButton)
                                 .onTapGesture {
                                     if icon == iconName {
                                         icon = "" // Deselect

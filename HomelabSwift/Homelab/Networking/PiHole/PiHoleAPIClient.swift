@@ -1,11 +1,15 @@
 import Foundation
 
 actor PiHoleAPIClient {
-    private let engine = BaseNetworkEngine(serviceType: .pihole)
+    private let engine: BaseNetworkEngine
     private var baseURL: String = ""
     private var fallbackURL: String = ""
     private var sid: String = ""
     private var authMode: PiHoleAuthMode?
+
+    init(instanceId: UUID) {
+        self.engine = BaseNetworkEngine(serviceType: .pihole, instanceId: instanceId)
+    }
 
     // MARK: - Configuration
 

@@ -5,6 +5,7 @@ import SwiftUI
 struct OfflineBanner: View {
     let serviceName: String
     let onReconnect: () -> Void
+    @Environment(Localizer.self) private var localizer
 
     var body: some View {
         HStack(spacing: 12) {
@@ -12,13 +13,13 @@ struct OfflineBanner: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(AppTheme.stopped)
 
-            Text("\(serviceName) unreachable")
+            Text(String(format: localizer.t.offlineUnreachable, serviceName))
                 .font(.subheadline)
                 .foregroundStyle(.primary)
 
             Spacer()
 
-            Button("Reconnect", action: onReconnect)
+            Button(localizer.t.reconnect, action: onReconnect)
                 .font(.caption.bold())
                 .buttonStyle(.glass)
                 .controlSize(.small)

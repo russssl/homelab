@@ -15,7 +15,7 @@ struct DashboardSummary: View {
     @State private var refreshID = UUID()
 
     private var hasAnyConnection: Bool {
-        ServiceType.allCases.contains { servicesStore.isConnected($0) }
+        ServiceType.allCases.contains { servicesStore.preferredInstance(for: $0) != nil }
     }
 
     /// Simple hash representing which services are reachable
@@ -23,6 +23,13 @@ struct DashboardSummary: View {
         ServiceType.allCases.map { type in
             let r = servicesStore.isReachable(type)
             return "\(type.rawValue):\(r.map { $0 ? "1" : "0" } ?? "?")"
+        }.joined(separator: ",")
+    }
+
+    private var preferredSelectionHash: String {
+        ServiceType.allCases.map { type in
+            let instanceId = servicesStore.preferredInstance(for: type)?.id.uuidString ?? "none"
+            return "\(type.rawValue):\(instanceId)"
         }.joined(separator: ",")
     }
 
@@ -37,16 +44,16 @@ struct DashboardSummary: View {
                         columns: [GridItem(.flexible()), GridItem(.flexible())],
                         spacing: 12
                     ) {
-                        if servicesStore.isConnected(.portainer) {
+                        if servicesStore.preferredInstance(for: .portainer) != nil {
                             portainerCard
                         }
-                        if servicesStore.isConnected(.pihole) {
+                        if servicesStore.preferredInstance(for: .pihole) != nil {
                             piholeCard
                         }
-                        if servicesStore.isConnected(.beszel) {
+                        if servicesStore.preferredInstance(for: .beszel) != nil {
                             beszelCard
                         }
-                        if servicesStore.isConnected(.gitea) {
+                        if servicesStore.preferredInstance(for: .gitea) != nil {
                             giteaCard
                         }
                     }
@@ -59,10 +66,17 @@ struct DashboardSummary: View {
                 refreshID = UUID()
                 // Clear data for unreachable services
                 for type in ServiceType.allCases {
-                    if servicesStore.isReachable(type) == false {
-                        clearDataForService(type)
-                    }
+                            if servicesStore.preferredReachability(for: type) == false {
+                                clearDataForService(type)
+                            }
                 }
+            }
+            .onChange(of: preferredSelectionHash) { _, _ in
+                portainerData = nil
+                piholeData = nil
+                beszelData = nil
+                giteaData = nil
+                refreshID = UUID()
             }
         }
     }
@@ -71,47 +85,43 @@ struct DashboardSummary: View {
 
     private var portainerCard: some View {
         SummaryCard(
+            type: .portainer,
             title: localizer.t.portainerContainers,
             value: portainerData.map { "\($0.running)" } ?? "—",
             subValue: portainerData.map { "/ \($0.total)" },
-            icon: "shippingbox.fill",
-            color: ServiceType.portainer.colors.primary,
             isLoading: portainerData == nil && isLoading,
-            isUnreachable: servicesStore.isReachable(.portainer) == false
+            isUnreachable: servicesStore.preferredReachability(for: .portainer) == false
         )
     }
 
     private var piholeCard: some View {
         SummaryCard(
+            type: .pihole,
             title: localizer.t.summaryQueryTotal,
             value: piholeData.map { Formatters.formatNumber($0.totalQueries) } ?? "—",
-            icon: "shield.fill",
-            color: ServiceType.pihole.colors.primary,
             isLoading: piholeData == nil && isLoading,
-            isUnreachable: servicesStore.isReachable(.pihole) == false
+            isUnreachable: servicesStore.preferredReachability(for: .pihole) == false
         )
     }
 
     private var beszelCard: some View {
         SummaryCard(
+            type: .beszel,
             title: localizer.t.summarySystemsOnline,
             value: beszelData.map { "\($0.online)" } ?? "—",
             subValue: beszelData.map { "/ \($0.total)" },
-            icon: "server.rack",
-            color: ServiceType.beszel.colors.primary,
             isLoading: beszelData == nil && isLoading,
-            isUnreachable: servicesStore.isReachable(.beszel) == false
+            isUnreachable: servicesStore.preferredReachability(for: .beszel) == false
         )
     }
 
     private var giteaCard: some View {
         SummaryCard(
+            type: .gitea,
             title: localizer.t.giteaRepos,
             value: giteaData.map { "\($0.totalRepos)" } ?? "—",
-            icon: "arrow.triangle.branch",
-            color: ServiceType.gitea.colors.primary,
             isLoading: giteaData == nil && isLoading,
-            isUnreachable: servicesStore.isReachable(.gitea) == false
+            isUnreachable: servicesStore.preferredReachability(for: .gitea) == false
         )
     }
 
@@ -122,16 +132,16 @@ struct DashboardSummary: View {
         defer { isLoading = false }
 
         await withTaskGroup(of: Void.self) { group in
-            if servicesStore.isConnected(.portainer) && servicesStore.isReachable(.portainer) != false {
+            if servicesStore.preferredInstance(for: .portainer) != nil && servicesStore.preferredReachability(for: .portainer) != false {
                 group.addTask { await fetchPortainer() }
             }
-            if servicesStore.isConnected(.pihole) && servicesStore.isReachable(.pihole) != false {
+            if servicesStore.preferredInstance(for: .pihole) != nil && servicesStore.preferredReachability(for: .pihole) != false {
                 group.addTask { await fetchPihole() }
             }
-            if servicesStore.isConnected(.beszel) && servicesStore.isReachable(.beszel) != false {
+            if servicesStore.preferredInstance(for: .beszel) != nil && servicesStore.preferredReachability(for: .beszel) != false {
                 group.addTask { await fetchBeszel() }
             }
-            if servicesStore.isConnected(.gitea) && servicesStore.isReachable(.gitea) != false {
+            if servicesStore.preferredInstance(for: .gitea) != nil && servicesStore.preferredReachability(for: .gitea) != false {
                 group.addTask { await fetchGitea() }
             }
         }
@@ -149,9 +159,11 @@ struct DashboardSummary: View {
     @MainActor
     private func fetchPortainer() async {
         do {
-            let endpoints = try await servicesStore.portainerClient.getEndpoints()
+            guard let instance = servicesStore.preferredInstance(for: .portainer),
+                  let client = await servicesStore.portainerClient(instanceId: instance.id) else { return }
+            let endpoints = try await client.getEndpoints()
             guard let first = endpoints.first else { return }
-            let containers = try await servicesStore.portainerClient.getContainers(endpointId: first.Id)
+            let containers = try await client.getContainers(endpointId: first.Id)
             let running = containers.filter { $0.State == "running" }.count
             portainerData = PortainerSummaryData(running: running, total: containers.count)
         } catch { /* silent */ }
@@ -160,7 +172,9 @@ struct DashboardSummary: View {
     @MainActor
     private func fetchPihole() async {
         do {
-            let stats = try await servicesStore.piholeClient.getStats()
+            guard let instance = servicesStore.preferredInstance(for: .pihole),
+                  let client = await servicesStore.piholeClient(instanceId: instance.id) else { return }
+            let stats = try await client.getStats()
             piholeData = PiholeSummaryData(totalQueries: stats.queries.total)
         } catch { /* silent */ }
     }
@@ -168,7 +182,9 @@ struct DashboardSummary: View {
     @MainActor
     private func fetchBeszel() async {
         do {
-            let response = try await servicesStore.beszelClient.getSystems()
+            guard let instance = servicesStore.preferredInstance(for: .beszel),
+                  let client = await servicesStore.beszelClient(instanceId: instance.id) else { return }
+            let response = try await client.getSystems()
             let online = response.items.filter { $0.isOnline }.count
             beszelData = BeszelSummaryData(online: online, total: response.items.count)
         } catch { /* silent */ }
@@ -177,7 +193,9 @@ struct DashboardSummary: View {
     @MainActor
     private func fetchGitea() async {
         do {
-            let repos = try await servicesStore.giteaClient.getUserRepos(page: 1, limit: 100)
+            guard let instance = servicesStore.preferredInstance(for: .gitea),
+                  let client = await servicesStore.giteaClient(instanceId: instance.id) else { return }
+            let repos = try await client.getUserRepos(page: 1, limit: 100)
             giteaData = GiteaSummaryData(totalRepos: repos.count)
         } catch { /* silent */ }
     }
@@ -206,37 +224,48 @@ private struct GiteaSummaryData {
 // MARK: - SummaryCard
 
 private struct SummaryCard: View {
+    let type: ServiceType
     let title: String
     let value: String
     var subValue: String? = nil
-    let icon: String
-    let color: Color
     var isLoading: Bool = false
     var isUnreachable: Bool = false
 
+    private var color: Color { isUnreachable ? AppTheme.textMuted : type.colors.primary }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon)
-                .font(.body.bold())
-                .foregroundStyle(isUnreachable ? AppTheme.textMuted : color)
-                .frame(width: 36, height: 36)
-                .background((isUnreachable ? AppTheme.textMuted : color).opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        VStack(alignment: .leading, spacing: 0) {
+            AsyncImage(url: URL(string: type.iconUrl)) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFit()
+                } else {
+                    Image(systemName: type.symbolName)
+                        .font(.title2)
+                        .foregroundStyle(color)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .frame(width: 56, height: 56)
+            .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .accessibilityHidden(true)
+            .padding(.bottom, 10)
 
             if isLoading {
-                SkeletonLoader(height: 24, cornerRadius: 6)
+                SkeletonLoader(height: 22, cornerRadius: 6)
                     .frame(width: 60)
             } else if isUnreachable {
                 HStack(spacing: 4) {
                     Image(systemName: "wifi.slash")
                         .font(.caption2)
+                        .accessibilityHidden(true)
                     Text("—")
-                        .font(.title2.bold())
+                        .font(.body.bold())
                 }
                 .foregroundStyle(AppTheme.textMuted)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(value)
-                        .font(.title2.bold())
+                        .font(.title3.bold())
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -249,12 +278,14 @@ private struct SummaryCard: View {
                 }
             }
 
+            Spacer(minLength: 4)
+
             Text(title)
                 .font(.caption)
                 .foregroundStyle(AppTheme.textMuted)
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .leading)
         .padding(14)
         .glassCard()
     }

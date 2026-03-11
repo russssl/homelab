@@ -9,8 +9,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homelab.app.R
 import com.homelab.app.data.remote.dto.gitea.*
+import com.homelab.app.ui.components.ServiceInstancePicker
 import com.homelab.app.util.ServiceType
 import com.homelab.app.util.UiState
 import com.homelab.app.ui.common.ErrorScreen
@@ -89,6 +93,7 @@ val HeatmapColors: List<Color>
 @Composable
 fun GiteaDashboardScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToInstance: (String) -> Unit,
     onNavigateToRepo: (owner: String, repo: String) -> Unit,
     viewModel: GiteaViewModel = hiltViewModel()
 ) {
@@ -100,6 +105,7 @@ fun GiteaDashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
     val repos by viewModel.repos.collectAsStateWithLifecycle()
+    val instances by viewModel.instances.collectAsStateWithLifecycle()
 
     val sortedRepos = remember(repos, sortOrder) {
         when (sortOrder) {
@@ -160,34 +166,56 @@ fun GiteaDashboardScreen(
                 )
             }
             is UiState.Success -> {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(1),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    user?.let { u ->
-                        item { UserCard(user = u) }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ServiceInstancePicker(
+                            instances = instances,
+                            selectedInstanceId = viewModel.instanceId,
+                            onInstanceSelected = { instance ->
+                                viewModel.setPreferredInstance(instance.id)
+                                onNavigateToInstance(instance.id)
+                            }
+                        )
                     }
 
-                    item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MiniStat(icon = Icons.Default.Folder, iconColor = Color(0xFF4CAF50), value = "${repoStats.first}", label = stringResource(R.string.gitea_repos), modifier = Modifier.weight(1f))
-                            MiniStat(icon = Icons.Default.Star, iconColor = Color(0xFFFF9800), value = "${repoStats.second}", label = stringResource(R.string.gitea_stars), modifier = Modifier.weight(1f))
-                            MiniStat(icon = Icons.AutoMirrored.Filled.CallMerge, iconColor = Color(0xFF2196F3), value = "$totalBranches", label = stringResource(R.string.gitea_branches), modifier = Modifier.weight(1f))
+                    user?.let { u ->
+                        item(span = { GridItemSpan(maxLineSpan) }) { UserCard(user = u) }
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                MiniStat(icon = Icons.Default.Folder, iconColor = Color(0xFF4CAF50), value = "${repoStats.first}", label = stringResource(R.string.gitea_repos))
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                MiniStat(icon = Icons.Default.Star, iconColor = Color(0xFFFF9800), value = "${repoStats.second}", label = stringResource(R.string.gitea_stars))
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                MiniStat(icon = Icons.AutoMirrored.Filled.CallMerge, iconColor = Color(0xFF2196F3), value = "$totalBranches", label = stringResource(R.string.gitea_branches))
+                            }
                         }
                     }
 
                     if (heatmap.isNotEmpty()) {
-                        item { HeatmapSection(heatmap = heatmap) }
+                        item(span = { GridItemSpan(maxLineSpan) }) { HeatmapSection(heatmap = heatmap) }
                     }
 
                     if (orgs.isNotEmpty()) {
-                        item { OrgsSection(orgs = orgs) }
+                        item(span = { GridItemSpan(maxLineSpan) }) { OrgsSection(orgs = orgs) }
                     }
 
-                    item {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${stringResource(R.string.gitea_repos)} (${repoStats.first})", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.weight(1f))
@@ -201,7 +229,12 @@ fun GiteaDashboardScreen(
                                 }
                             ) {
                                 Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(if (sortOrder == RepoSortOrder.RECENT) Icons.Default.AccessTime else Icons.Default.SortByAlpha, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(
+                                        if (sortOrder == RepoSortOrder.RECENT) Icons.Default.AccessTime else Icons.Default.SortByAlpha,
+                                        contentDescription = if (sortOrder == RepoSortOrder.RECENT) stringResource(R.string.gitea_sort_recent) else stringResource(R.string.gitea_sort_alpha),
+                                        modifier = Modifier.size(12.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     Text(if (sortOrder == RepoSortOrder.RECENT) stringResource(R.string.gitea_sort_recent) else stringResource(R.string.gitea_sort_alpha), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -209,16 +242,20 @@ fun GiteaDashboardScreen(
                     }
 
                     if (sortedRepos.isEmpty()) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = stringResource(R.string.gitea_no_repos), modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(stringResource(R.string.gitea_no_repos), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
                     } else {
-                        items(sortedRepos, key = { it.id }) { repo ->
+                        items(
+                            items = sortedRepos,
+                            key = { it.id },
+                            span = { GridItemSpan(maxLineSpan) }
+                        ) { repo ->
                             RepoCard(repo = repo, onClick = { onNavigateToRepo(repo.owner.login, repo.name) })
                         }
                     }
@@ -245,7 +282,7 @@ private fun UserCard(user: GiteaUser) {
                 color = ServiceType.GITEA.primaryColor.copy(alpha = 0.1f),
                 modifier = Modifier.size(52.dp)
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = ServiceType.GITEA.primaryColor, modifier = Modifier.padding(14.dp))
+                Icon(Icons.Default.Person, contentDescription = stringResource(R.string.service_gitea), tint = ServiceType.GITEA.primaryColor, modifier = Modifier.padding(14.dp))
             }
             Column {
                 Text(user.full_name.ifEmpty { user.login }, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
@@ -256,20 +293,30 @@ private fun UserCard(user: GiteaUser) {
 }
 
 @Composable
-private fun MiniStat(icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, value: String, label: String, modifier: Modifier = Modifier) {
+private fun MiniStat(icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, value: String, label: String) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier
+        modifier = Modifier.height(96.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -285,7 +332,7 @@ private fun OrgsSection(orgs: List<GiteaOrg>) {
                     color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CorporateFare, contentDescription = null, tint = ServiceType.GITEA.primaryColor, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CorporateFare, contentDescription = stringResource(R.string.gitea_orgs), tint = ServiceType.GITEA.primaryColor, modifier = Modifier.size(16.dp))
                         Text(org.username, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
                     }
                 }
@@ -300,7 +347,7 @@ private fun RepoCard(repo: GiteaRepo, onClick: () -> Unit) {
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
         label = "BouncyScale"
     )
     val haptic = LocalHapticFeedback.current
@@ -323,20 +370,20 @@ private fun RepoCard(repo: GiteaRepo, onClick: () -> Unit) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (repo.isPrivate) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = null, tint = if (repo.isPrivate) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                Icon(if (repo.isPrivate) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = stringResource(if (repo.isPrivate) R.string.gitea_private else R.string.gitea_public), tint = if (repo.isPrivate) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(repo.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = ServiceType.GITEA.primaryColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.weight(1f))
-                if (repo.fork) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(stringResource(R.string.gitea_fork), style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (repo.fork) {
+                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = stringResource(R.string.gitea_fork), modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(stringResource(R.string.gitea_fork), style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
+                        Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.home_open), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // Description
@@ -353,11 +400,11 @@ private fun RepoCard(repo: GiteaRepo, onClick: () -> Unit) {
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFFFF9800))
+                    Icon(Icons.Default.Star, contentDescription = stringResource(R.string.gitea_stars), modifier = Modifier.size(12.dp), tint = Color(0xFFFF9800))
                     Text("${repo.stars_count}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = stringResource(R.string.gitea_forks), modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${repo.forks_count}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(modifier = Modifier.weight(1f))

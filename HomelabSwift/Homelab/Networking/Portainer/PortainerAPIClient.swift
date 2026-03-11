@@ -1,12 +1,16 @@
 import Foundation
 
 actor PortainerAPIClient {
-    private let engine = BaseNetworkEngine(serviceType: .portainer)
+    private let engine: BaseNetworkEngine
     private var baseURL: String = ""
     private var fallbackURL: String = ""
     private var jwt: String = ""
     private var apiKey: String = ""
     private var useApiKey: Bool = false
+
+    init(instanceId: UUID) {
+        self.engine = BaseNetworkEngine(serviceType: .portainer, instanceId: instanceId)
+    }
 
     // MARK: - Configuration
 

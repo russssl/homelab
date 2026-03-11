@@ -3,6 +3,7 @@ import SwiftUI
 // Maps to app/beszel/[systemId].tsx — system detail with info, resources, network, containers
 
 struct BeszelSystemDetail: View {
+    let instanceId: UUID
     let systemId: String
 
     @Environment(ServicesStore.self) private var servicesStore
@@ -68,13 +69,20 @@ struct BeszelSystemDetail: View {
                     (isUp ? AppTheme.running : AppTheme.stopped).opacity(0.1),
                     in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(system.name)
                     .font(.title3.bold())
-                Text("\(system.host):\(system.port)")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.textMuted)
+                if let port = system.port {
+                    Text("\(system.host):\(port)")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textMuted)
+                } else {
+                    Text(system.host)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textMuted)
+                }
             }
 
             Spacer()
@@ -138,14 +146,8 @@ struct BeszelSystemDetail: View {
 
     @ViewBuilder
     private func resourcesSection(system: BeszelSystem, info: BeszelSystemInfo) -> some View {
-        let latestStats = records.first?.stats
         let cpuHistory = Array(records.prefix(20).reversed().map { $0.stats.cpuValue })
         let memHistory = Array(records.prefix(20).reversed().map { $0.stats.mpValue })
-
-        let memUsed = latestStats?.mValue ?? info.mValue
-        let memTotal = latestStats?.mtValue ?? info.mtValue
-        let diskUsed = latestStats?.dValue ?? info.dValue
-        let diskTotal = latestStats?.dtValue ?? info.dtValue
 
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(icon: "square.stack.3d.up", title: localizer.t.beszelResources)
@@ -288,7 +290,10 @@ struct BeszelSystemDetail: View {
 
     private func fetchAll() async {
         do {
-            let s = try await servicesStore.beszelClient.getSystem(id: systemId)
+            guard let client = await servicesStore.beszelClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            let s = try await client.getSystem(id: systemId)
             system = s
         } catch {
             if system == nil {
@@ -298,7 +303,8 @@ struct BeszelSystemDetail: View {
         }
 
         // Records are non-critical — fetch separately
-        if let r = try? await servicesStore.beszelClient.getSystemRecords(systemId: systemId, limit: 30) {
+        if let client = await servicesStore.beszelClient(instanceId: instanceId),
+           let r = try? await client.getSystemRecords(systemId: systemId, limit: 30) {
             records = r.items
         }
 

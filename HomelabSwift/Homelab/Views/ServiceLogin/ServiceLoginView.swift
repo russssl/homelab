@@ -1,27 +1,32 @@
 import SwiftUI
 
-// Maps to app/service-login.tsx
-// Modal sheet for connecting to a service.
-
 struct ServiceLoginView: View {
     let serviceType: ServiceType
+    var existingInstanceId: UUID? = nil
 
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
     @Environment(\.dismiss) private var dismiss
 
+    @State private var label = ""
     @State private var url = ""
+    @State private var fallbackUrl = ""
     @State private var username = ""
     @State private var password = ""
     @State private var apiKey = ""
     @State private var showPassword = false
-    @State private var useApiKeyMode = false
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var shakeOffset: CGFloat = 0
+    @State private var didPrefill = false
 
+    private var existingInstance: ServiceInstance? {
+        existingInstanceId.flatMap { servicesStore.instance(id: $0) }
+    }
+
+    private var isEditing: Bool { existingInstance != nil }
     private var serviceColor: Color { serviceType.colors.primary }
-    private var needsUsername: Bool { serviceType != .pihole && serviceType != .portainer }
+    private var needsUsername: Bool { serviceType == .beszel || serviceType == .gitea }
 
     var body: some View {
         NavigationStack {
@@ -47,6 +52,7 @@ struct ServiceLoginView: View {
                             .padding(8)
                             .background(Color(uiColor: .tertiarySystemFill), in: Circle())
                     }
+                    .accessibilityLabel(localizer.t.close)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -55,10 +61,11 @@ struct ServiceLoginView: View {
                     }
                 }
             }
+            .task {
+                prefillIfNeeded()
+            }
         }
     }
-
-    // MARK: - Header
 
     private var headerSection: some View {
         VStack(spacing: 16) {
@@ -68,11 +75,11 @@ struct ServiceLoginView: View {
                 .frame(width: 80, height: 80)
                 .background(serviceType.colors.bg, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-            Text(serviceType.displayName)
+            Text(isEditing ? String(format: localizer.t.loginEditTitle, serviceType.displayName) : serviceType.displayName)
                 .font(.title.bold())
                 .foregroundStyle(.primary)
 
-            Text(localizer.t.loginSubtitle)
+            Text(isEditing ? localizer.t.loginEditSubtitle : localizer.t.loginSubtitle)
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -81,11 +88,8 @@ struct ServiceLoginView: View {
         .padding(.bottom, 36)
     }
 
-    // MARK: - Form
-
     private var formSection: some View {
         VStack(spacing: 14) {
-            // Hint banner
             if let hint = loginHint {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "info.circle.fill")
@@ -104,7 +108,6 @@ struct ServiceLoginView: View {
                 )
             }
 
-            // Error banner
             if let errorMessage {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.circle.fill")
@@ -122,7 +125,12 @@ struct ServiceLoginView: View {
                 )
             }
 
-            // URL field
+            InputField(
+                icon: "tag.fill",
+                placeholder: localizer.t.loginLabel,
+                text: $label
+            )
+
             InputField(
                 icon: "globe",
                 placeholder: localizer.t.loginUrlPlaceholder,
@@ -130,8 +138,13 @@ struct ServiceLoginView: View {
                 keyboardType: .URL
             )
 
+            InputField(
+                icon: "link",
+                placeholder: localizer.t.loginFallbackOptional,
+                text: $fallbackUrl,
+                keyboardType: .URL
+            )
 
-            // Credential fields
             if serviceType == .portainer {
                 InputField(
                     icon: "key.fill",
@@ -141,7 +154,7 @@ struct ServiceLoginView: View {
                     showToggle: true,
                     toggleAction: { showPassword.toggle() },
                     showPassword: showPassword,
-                    onSubmit: handleLogin
+                    onSubmit: handleSave
                 )
             } else {
                 if needsUsername {
@@ -155,24 +168,23 @@ struct ServiceLoginView: View {
 
                 InputField(
                     icon: "lock.fill",
-                    placeholder: localizer.t.loginPassword,
+                    placeholder: isEditing ? localizer.t.loginPasswordIfChanging : localizer.t.loginPassword,
                     text: $password,
                     isSecure: !showPassword,
                     showToggle: true,
                     toggleAction: { showPassword.toggle() },
                     showPassword: showPassword,
-                    onSubmit: handleLogin
+                    onSubmit: handleSave
                 )
             }
 
-            // Connect button
-            Button(action: handleLogin) {
+            Button(action: handleSave) {
                 Group {
                     if isLoading {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text(localizer.t.loginConnect)
+                        Text(isEditing ? localizer.t.save : localizer.t.loginConnect)
                             .fontWeight(.semibold)
                     }
                 }
@@ -188,8 +200,6 @@ struct ServiceLoginView: View {
         .offset(x: shakeOffset)
     }
 
-    // MARK: - Login Logic
-
     private var loginHint: String? {
         switch serviceType {
         case .portainer: return localizer.t.loginHintPortainer
@@ -199,42 +209,43 @@ struct ServiceLoginView: View {
         }
     }
 
-    private func handleLogin() {
+    private func prefillIfNeeded() {
+        guard !didPrefill, let existing = existingInstance else {
+            if !didPrefill && label.isEmpty {
+                label = serviceType.displayName
+            }
+            didPrefill = true
+            return
+        }
+
+        label = existing.displayLabel
+        url = existing.url
+        fallbackUrl = existing.fallbackUrl ?? ""
+        username = existing.username ?? ""
+        apiKey = existing.apiKey ?? ""
+        password = existing.piholePassword ?? ""
+        didPrefill = true
+    }
+
+    private func handleSave() {
         errorMessage = nil
 
-        // Validate
-        var cleanUrl = url.trimmingCharacters(in: .whitespaces)
+        let cleanUrl = normalizedURL(url)
         guard !cleanUrl.isEmpty else {
             showError(localizer.t.loginErrorUrl)
             return
         }
-        if !cleanUrl.hasPrefix("http://") && !cleanUrl.hasPrefix("https://") {
-            cleanUrl = "https://" + cleanUrl
-        }
 
-        if serviceType == .portainer {
-            guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else {
-                showError(localizer.t.loginErrorCredentials)
-                return
-            }
-        } else {
-            if needsUsername && username.trimmingCharacters(in: .whitespaces).isEmpty {
-                showError(localizer.t.loginErrorCredentials)
-                return
-            }
-            if password.trimmingCharacters(in: .whitespaces).isEmpty {
-                showError(localizer.t.loginErrorCredentials)
-                return
-            }
-        }
+        let cleanFallback = normalizedOptionalURL(fallbackUrl)
+        let cleanLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? serviceType.displayName : label.trimmingCharacters(in: .whitespacesAndNewlines)
 
         HapticManager.medium()
         isLoading = true
 
         Task {
             do {
-                let connection = try await authenticate(url: cleanUrl)
-                await servicesStore.connectService(connection)
+                let instance = try await buildInstance(label: cleanLabel, url: cleanUrl, fallbackUrl: cleanFallback)
+                await servicesStore.saveInstance(instance, refreshPiHoleAuth: false)
                 HapticManager.success()
                 dismiss()
             } catch {
@@ -244,52 +255,155 @@ struct ServiceLoginView: View {
         }
     }
 
-    private func authenticate(url: String) async throws -> ServiceConnection {
+    private func buildInstance(label: String, url: String, fallbackUrl: String?) async throws -> ServiceInstance {
+        if let existing = existingInstance {
+            let metadataOnly = existing.url == url
+                && existing.username == normalizedOptional(username)
+                && existing.apiKey == normalizedOptional(apiKey)
+                && normalizedOptional(password).map { !$0.isEmpty } != true
+
+            if metadataOnly {
+                return existing.updating(label: label, fallbackUrl: fallbackUrl)
+            }
+        }
+
         switch serviceType {
         case .portainer:
-            try await servicesStore.portainerClient.authenticateWithApiKey(url: url, apiKey: apiKey.trimmingCharacters(in: .whitespaces))
-            return ServiceConnection(type: .portainer, url: url, apiKey: apiKey.trimmingCharacters(in: .whitespaces))
+            let key = normalizedOptional(apiKey) ?? existingInstance?.apiKey
+            guard let key, !key.isEmpty else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            let client = PortainerAPIClient(instanceId: existingInstanceId ?? UUID())
+            try await client.authenticateWithApiKey(url: url, apiKey: key)
+            return ServiceInstance(
+                id: existingInstanceId ?? UUID(),
+                type: .portainer,
+                label: label,
+                url: url,
+                token: existingInstance?.token ?? "",
+                username: existingInstance?.username,
+                apiKey: key,
+                fallbackUrl: fallbackUrl
+            )
 
         case .pihole:
-            let trimmedPassword = password.trimmingCharacters(in: .whitespaces)
-            let sid = try await servicesStore.piholeClient.authenticate(url: url, password: trimmedPassword)
-            let authMode: PiHoleAuthMode = sid == trimmedPassword ? .legacy : .session
-            return ServiceConnection(
+            let secret = normalizedOptional(password) ?? existingInstance?.piHoleStoredSecret
+            guard let secret, !secret.isEmpty else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            let client = PiHoleAPIClient(instanceId: existingInstanceId ?? UUID())
+            let sid = try await client.authenticate(url: url, password: secret)
+            let authMode: PiHoleAuthMode = sid == secret ? .legacy : .session
+            return ServiceInstance(
+                id: existingInstanceId ?? UUID(),
                 type: .pihole,
+                label: label,
                 url: url,
                 token: sid,
-                piholePassword: trimmedPassword,
-                piholeAuthMode: authMode
+                username: existingInstance?.username,
+                apiKey: existingInstance?.apiKey,
+                piholePassword: secret,
+                piholeAuthMode: authMode,
+                fallbackUrl: fallbackUrl
             )
 
         case .beszel:
-            let token = try await servicesStore.beszelClient.authenticate(url: url, email: username.trimmingCharacters(in: .whitespaces), password: password)
-            return ServiceConnection(type: .beszel, url: url, token: token, username: username.trimmingCharacters(in: .whitespaces))
+            let identity = normalizedOptional(username) ?? existingInstance?.username
+            let secret = normalizedOptional(password)
+            guard let identity, !identity.isEmpty else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            if existingInstance != nil && url != existingInstance?.url && secret == nil {
+                throw APIError.custom(localizer.t.loginErrorPasswordRequired)
+            }
+            let token: String
+            if let secret, !secret.isEmpty {
+                let client = BeszelAPIClient(instanceId: existingInstanceId ?? UUID())
+                token = try await client.authenticate(url: url, email: identity, password: secret)
+            } else if let existingToken = existingInstance?.token, !existingToken.isEmpty {
+                token = existingToken
+            } else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            return ServiceInstance(
+                id: existingInstanceId ?? UUID(),
+                type: .beszel,
+                label: label,
+                url: url,
+                token: token,
+                username: identity,
+                fallbackUrl: fallbackUrl
+            )
 
         case .gitea:
-            let result = try await servicesStore.giteaClient.authenticate(url: url, username: username.trimmingCharacters(in: .whitespaces), password: password)
-            return ServiceConnection(type: .gitea, url: url, token: result.token, username: result.username)
+            let identity = normalizedOptional(username) ?? existingInstance?.username
+            let secret = normalizedOptional(password)
+            guard let identity, !identity.isEmpty else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            if existingInstance != nil && url != existingInstance?.url && secret == nil {
+                throw APIError.custom(localizer.t.loginErrorPasswordRequired)
+            }
+            let token: String
+            let resolvedUsername: String
+            if let secret, !secret.isEmpty {
+                let client = GiteaAPIClient(instanceId: existingInstanceId ?? UUID())
+                let result = try await client.authenticate(url: url, username: identity, password: secret)
+                token = result.token
+                resolvedUsername = result.username
+            } else if let existing = existingInstance, !existing.token.isEmpty {
+                token = existing.token
+                resolvedUsername = existing.username ?? identity
+            } else {
+                throw APIError.custom(localizer.t.loginErrorCredentials)
+            }
+            return ServiceInstance(
+                id: existingInstanceId ?? UUID(),
+                type: .gitea,
+                label: label,
+                url: url,
+                token: token,
+                username: resolvedUsername,
+                fallbackUrl: fallbackUrl
+            )
         }
+    }
+
+    private func normalizedURL(_ raw: String) -> String {
+        var clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return "" }
+        if !clean.hasPrefix("http://") && !clean.hasPrefix("https://") {
+            clean = "https://" + clean
+        }
+        return clean.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+    }
+
+    private func normalizedOptionalURL(_ raw: String) -> String? {
+        let clean = normalizedURL(raw)
+        return clean.isEmpty ? nil : clean
+    }
+
+    private func normalizedOptional(_ raw: String) -> String? {
+        let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? nil : clean
     }
 
     private func showError(_ message: String) {
         errorMessage = message
         HapticManager.error()
-        // Shake animation
-        withAnimation(.default) { shakeOffset = 10 }
+        let shake = Animation.easeInOut(duration: 0.06)
+        withAnimation(shake) { shakeOffset = 8 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.default) { shakeOffset = -10 }
+            withAnimation(shake) { shakeOffset = -8 }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.default) { shakeOffset = 10 }
+            withAnimation(shake) { shakeOffset = 8 }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) { shakeOffset = 0 }
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) { shakeOffset = 0 }
         }
     }
 }
-
-// MARK: - InputField Component
 
 private struct InputField: View {
     let icon: String
@@ -301,7 +415,6 @@ private struct InputField: View {
     var toggleAction: (() -> Void)? = nil
     var showPassword: Bool = false
     var onSubmit: (() -> Void)? = nil
-
     @Environment(Localizer.self) private var localizer
 
     var body: some View {
@@ -337,6 +450,7 @@ private struct InputField: View {
                         .foregroundStyle(AppTheme.textMuted)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(showPassword ? localizer.t.loginHidePassword : localizer.t.loginShowPassword)
                 .padding(.horizontal, 14)
             }
         }

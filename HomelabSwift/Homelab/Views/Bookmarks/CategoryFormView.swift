@@ -18,13 +18,13 @@ struct CategoryFormView: View {
             Form {
                 Section {
                     TextField(localizer.t.categoryName, text: $name)
-                    TextField("SF Symbol Name (optional)", text: $icon)
+                    TextField(localizer.t.categorySymbolPlaceholder, text: $icon)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } header: {
                     Text(localizer.t.categoryName)
                 } footer: {
-                    Text("Example: 'folder', 'network', 'play.tv.fill'")
+                    Text(localizer.t.categorySymbolExample)
                 }
                 
                 if isEditing {

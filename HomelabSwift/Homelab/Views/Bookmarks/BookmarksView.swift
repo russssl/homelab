@@ -165,6 +165,7 @@ struct BookmarksView: View {
             }
             .buttonStyle(.plain)
             .glassCard(cornerRadius: 18, tint: nil)
+            .accessibilityLabel(localizer.t.bookmarkReorder)
 
             Spacer()
 
@@ -179,6 +180,7 @@ struct BookmarksView: View {
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(localizer.t.bookmarkToggleView)
 
                 Menu {
                     Button {
@@ -198,6 +200,7 @@ struct BookmarksView: View {
                         .font(.title3.weight(.semibold))
                         .frame(width: 44, height: 44)
                 }
+                .accessibilityLabel(localizer.t.bookmarkAdd)
             }
             .glassCard(cornerRadius: 18, tint: nil)
         }
@@ -218,11 +221,13 @@ struct BookmarksView: View {
             Image(systemName: "magnifyingglass")
                 .font(.title3)
                 .foregroundStyle(AppTheme.textSecondary)
+                .accessibilityHidden(true)
 
             TextField(localizer.t.bookmarkSearchPrompt, text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.title3.weight(.medium))
+                .accessibilityLabel(localizer.t.bookmarkSearchPrompt)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -245,6 +250,7 @@ struct BookmarksView: View {
             Image(systemName: "bookmark.slash.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(AppTheme.textMuted)
+                .accessibilityLabel(localizer.t.categoryEmpty)
 
             Text(localizer.t.categoryEmpty)
                 .font(.headline)
@@ -281,6 +287,7 @@ struct BookmarksView: View {
                             .font(.subheadline)
                             .foregroundStyle(category.categoryColor)
                             .frame(width: 28, height: 28)
+                            .accessibilityHidden(true)
                     }
 
                     Text(category.name)
@@ -299,6 +306,7 @@ struct BookmarksView: View {
                     Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.textSecondary)
+                        .accessibilityHidden(true)
 
                     Spacer(minLength: 0)
                 }
@@ -306,6 +314,9 @@ struct BookmarksView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(category.name)
+            .accessibilityValue("\(visibleCount)")
+            .accessibilityHint(isCollapsed ? localizer.t.bookmarkExpandCategory : localizer.t.bookmarkCollapseCategory)
 
             Menu {
                 Button {
@@ -332,6 +343,7 @@ struct BookmarksView: View {
                     .frame(width: 30, height: 30)
                     .background(Color(.tertiarySystemFill), in: Circle())
             }
+            .accessibilityLabel(localizer.t.categoryActions)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -377,6 +389,7 @@ struct BookmarkRow: View {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(AppTheme.textMuted)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -441,6 +454,7 @@ struct BookmarkRow: View {
             Image(systemName: "arrow.up.right")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textMuted)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 8)
@@ -619,12 +633,13 @@ private struct BookmarksReorderView: View {
                                             .font(.caption2)
                                             .foregroundStyle(category.categoryColor)
                                     )
+                                    .accessibilityHidden(true)
 
                                 Text(bookmark.title)
                                     .lineLimit(1)
                                     .font(.subheadline)
 
-                                Text(reorderBookmarkLabel)
+                                Text(localizer.t.bookmarkReorderBookmarkLabel)
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 7)
@@ -647,6 +662,7 @@ private struct BookmarksReorderView: View {
                                             .font(.caption)
                                             .foregroundStyle(AppTheme.textSecondary)
                                     }
+                                    .accessibilityLabel(localizer.t.bookmarkMoveToCategory)
                                 }
                             }
                             .padding(.leading, 14)
@@ -671,7 +687,7 @@ private struct BookmarksReorderView: View {
                                     .foregroundStyle(category.categoryColor)
                             }
                             Text(category.name)
-                            Text(reorderCategoryLabel)
+                            Text(localizer.t.bookmarkReorderCategoryLabel)
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 7)
@@ -688,6 +704,7 @@ private struct BookmarksReorderView: View {
                                         .font(.caption.bold())
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(localizer.t.settingsMoveUp)
                                 .disabled(categoryIndex == 0)
                                 .opacity(categoryIndex == 0 ? 0.3 : 0.85)
 
@@ -698,6 +715,7 @@ private struct BookmarksReorderView: View {
                                         .font(.caption.bold())
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(localizer.t.settingsMoveDown)
                                 .disabled(categoryIndex == bookmarkManager.categories.count - 1)
                                 .opacity(categoryIndex == bookmarkManager.categories.count - 1 ? 0.3 : 0.85)
                             }
@@ -716,7 +734,7 @@ private struct BookmarksReorderView: View {
                 }
             }
             .environment(\.editMode, $editMode)
-            .navigationTitle(localizer.t.bookmarkEdit)
+            .navigationTitle(localizer.t.bookmarkReorder)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(localizer.t.close) {
@@ -736,23 +754,4 @@ private struct BookmarksReorderView: View {
         bookmarkManager.moveCategory(from: source, to: destination)
     }
 
-    private var reorderCategoryLabel: String {
-        switch localizer.language {
-        case .it: return "Categoria"
-        case .fr: return "Categorie"
-        case .es: return "Categoría"
-        case .de: return "Kategorie"
-        case .en: return "Category"
-        }
-    }
-
-    private var reorderBookmarkLabel: String {
-        switch localizer.language {
-        case .it: return "Segnalibro"
-        case .fr: return "Favori"
-        case .es: return "Marcador"
-        case .de: return "Lesezeichen"
-        case .en: return "Bookmark"
-        }
-    }
 }

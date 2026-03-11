@@ -3,6 +3,7 @@ import SwiftUI
 // Maps to app/portainer/containers.tsx
 
 struct ContainerListView: View {
+    let instanceId: UUID
     let endpointId: Int
 
     @Environment(ServicesStore.self) private var servicesStore
@@ -84,8 +85,8 @@ struct ContainerListView: View {
         .navigationTitle(localizer.t.portainerContainers)
         .navigationDestination(for: PortainerRoute.self) { route in
             switch route {
-            case .containerDetail(let epId, let cId):
-                ContainerDetailView(endpointId: epId, containerId: cId)
+            case .containerDetail(let routeInstanceId, let epId, let cId):
+                ContainerDetailView(instanceId: routeInstanceId, endpointId: epId, containerId: cId)
             default: EmptyView()
             }
         }
@@ -104,6 +105,7 @@ struct ContainerListView: View {
             Image(systemName: "magnifyingglass")
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textMuted)
+                .accessibilityHidden(true)
             TextField(localizer.t.containersSearch, text: $search)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -113,6 +115,7 @@ struct ContainerListView: View {
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textMuted)
                 }
+                .accessibilityLabel(localizer.t.actionClear)
             }
         }
         .padding(.horizontal, 12)
@@ -166,7 +169,7 @@ struct ContainerListView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(filteredContainers) { container in
-                    NavigationLink(value: PortainerRoute.containerDetail(endpointId: endpointId, containerId: container.Id)) {
+                    NavigationLink(value: PortainerRoute.containerDetail(instanceId: instanceId, endpointId: endpointId, containerId: container.Id)) {
                         ContainerRow(
                             container: container,
                             t: localizer.t,
@@ -191,7 +194,10 @@ struct ContainerListView: View {
         actionInProgress = containerId
         Task {
             do {
-                try await servicesStore.portainerClient.containerAction(endpointId: endpointId, containerId: containerId, action: action)
+                guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                    throw APIError.notConfigured
+                }
+                try await client.containerAction(endpointId: endpointId, containerId: containerId, action: action)
                 HapticManager.success()
                 await fetchContainers()
             } catch {
@@ -209,7 +215,10 @@ struct ContainerListView: View {
         isLoading = containers.isEmpty
         defer { isLoading = false }
         do {
-            containers = try await servicesStore.portainerClient.getContainers(endpointId: endpointId)
+            guard let client = await servicesStore.portainerClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            containers = try await client.getContainers(endpointId: endpointId)
         } catch {
             if containers.isEmpty {
                 actionError = error.localizedDescription

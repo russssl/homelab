@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.DragIndicator
@@ -83,13 +83,16 @@ fun BookmarksScreen(
                 ),
                 actions = {
                     FilledTonalIconButton(onClick = { isGridView = !isGridView }) {
-                        Icon(if (isGridView) Icons.Default.ViewList else Icons.Default.GridView, contentDescription = "Toggle View")
+                        Icon(
+                            if (isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                            contentDescription = stringResource(R.string.bookmark_toggle_view)
+                        )
                     }
                     FilledTonalIconButton(
                         onClick = { showReorderDialog = true },
                         enabled = uiState.categories.isNotEmpty()
                     ) {
-                        Icon(Icons.Default.SwapVert, contentDescription = "Reorder")
+                        Icon(Icons.Default.SwapVert, contentDescription = stringResource(R.string.bookmark_reorder))
                     }
                     FilledTonalIconButton(onClick = {
                         categoryToEdit = null
@@ -129,11 +132,11 @@ fun BookmarksScreen(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 placeholder = { Text(stringResource(R.string.bookmark_search)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.bookmark_search), modifier = Modifier.size(20.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.action_clear), modifier = Modifier.size(20.dp))
                         }
                     }
                 },
@@ -154,7 +157,7 @@ fun BookmarksScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                         Icon(
                             Icons.Default.BookmarkBorder,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.category_empty),
                             modifier = Modifier.size(56.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
@@ -413,7 +416,7 @@ fun CategoryHeader(
                     ) {
                         Icon(
                             imageVector = categoryIcon,
-                            contentDescription = null,
+                            contentDescription = category.name,
                             tint = categoryColor ?: MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
@@ -439,7 +442,9 @@ fun CategoryHeader(
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector = if (isCollapsed) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-                    contentDescription = null,
+                    contentDescription = stringResource(
+                        if (isCollapsed) R.string.bookmark_expand_category else R.string.bookmark_collapse_category
+                    ),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
@@ -447,10 +452,10 @@ fun CategoryHeader(
 
             Row {
                 IconButton(onClick = onAddBookmark, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Bookmark", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.bookmark_add), modifier = Modifier.size(20.dp))
                 }
                 IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Edit Category", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.category_edit), modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -465,10 +470,11 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
             FallbackRemoteIcon(
                 urls = candidates,
                 modifier = Modifier.size(size.dp),
+                contentDescription = stringResource(R.string.bookmark_icon),
                 loading = {
                     Icon(
                         Icons.Default.Language,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor.copy(alpha = 0.4f),
                         modifier = Modifier.size(size.dp)
                     )
@@ -476,7 +482,7 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
                 fallback = {
                     Icon(
                         Icons.Default.Language,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor,
                         modifier = Modifier.size(size.dp)
                     )
@@ -488,10 +494,11 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
             FallbackRemoteIcon(
                 urls = listOfNotNull(selfhstCandidate),
                 modifier = Modifier.size(size.dp),
+                contentDescription = stringResource(R.string.bookmark_icon),
                 loading = {
                     Icon(
                         Icons.Default.Language,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor.copy(alpha = 0.4f),
                         modifier = Modifier.size(size.dp)
                     )
@@ -499,7 +506,7 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
                 fallback = {
                     Icon(
                         Icons.Default.BookmarkBorder,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor,
                         modifier = Modifier.size(size.dp)
                     )
@@ -511,10 +518,11 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
             FallbackRemoteIcon(
                 urls = listOfNotNull(imageCandidate),
                 modifier = Modifier.size(size.dp),
+                contentDescription = stringResource(R.string.bookmark_icon),
                 loading = {
                     Icon(
                         Icons.Default.Language,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor.copy(alpha = 0.4f),
                         modifier = Modifier.size(size.dp)
                     )
@@ -522,7 +530,7 @@ private fun BookmarkIcon(bookmark: Bookmark, accentColor: Color, size: Int = 28)
                 fallback = {
                     Icon(
                         Icons.Default.BookmarkBorder,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.bookmark_icon),
                         tint = accentColor,
                         modifier = Modifier.size(size.dp)
                     )
@@ -615,7 +623,7 @@ fun BookmarkListCard(
         IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
             Icon(
                 Icons.Default.MoreVert,
-                contentDescription = "Edit",
+                contentDescription = stringResource(R.string.edit),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
@@ -647,7 +655,7 @@ fun BookmarkGridCard(
             IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
                 Icon(
                     Icons.Default.MoreVert,
-                    contentDescription = "Edit",
+                    contentDescription = stringResource(R.string.edit),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     modifier = Modifier.size(14.dp)
                 )
@@ -751,7 +759,7 @@ private fun BookmarksReorderDialog(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Icon(
                                     imageVector = categoryIconForId(category.icon) ?: Icons.Default.CreateNewFolder,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(R.string.category_icon),
                                     tint = categoryColor,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -778,14 +786,14 @@ private fun BookmarksReorderDialog(
                                     enabled = categoryIndex > 0,
                                     modifier = Modifier.size(28.dp)
                                 ) {
-                                    Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up), modifier = Modifier.size(16.dp))
                                 }
                                 IconButton(
                                     onClick = { onMoveCategory(categoryIndex, categoryIndex + 1) },
                                     enabled = categoryIndex < orderedCategories.lastIndex,
                                     modifier = Modifier.size(28.dp)
                                 ) {
-                                    Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.ArrowDownward, contentDescription = stringResource(R.string.settings_move_down), modifier = Modifier.size(16.dp))
                                 }
                             }
 
@@ -808,7 +816,7 @@ private fun BookmarksReorderDialog(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.DragIndicator,
-                                                contentDescription = null,
+                                                contentDescription = stringResource(R.string.bookmark_drag_handle),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                                                 modifier = Modifier.size(14.dp)
                                             )
@@ -838,14 +846,14 @@ private fun BookmarksReorderDialog(
                                                 enabled = bookmarkIndex > 0,
                                                 modifier = Modifier.size(28.dp)
                                             ) {
-                                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up), modifier = Modifier.size(16.dp))
                                             }
                                             IconButton(
                                                 onClick = { onMoveBookmark(category.id, bookmarkIndex, bookmarkIndex + 1) },
                                                 enabled = bookmarkIndex < categoryBookmarks.lastIndex,
                                                 modifier = Modifier.size(28.dp)
                                             ) {
-                                                Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.ArrowDownward, contentDescription = stringResource(R.string.settings_move_down), modifier = Modifier.size(16.dp))
                                             }
                                         }
                                     }

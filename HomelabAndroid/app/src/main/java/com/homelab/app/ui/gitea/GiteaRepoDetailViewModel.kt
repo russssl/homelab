@@ -1,22 +1,26 @@
 package com.homelab.app.ui.gitea
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.homelab.app.data.remote.dto.gitea.*
+import com.homelab.app.data.remote.dto.gitea.GiteaBranch
+import com.homelab.app.data.remote.dto.gitea.GiteaCommit
+import com.homelab.app.data.remote.dto.gitea.GiteaFileContent
+import com.homelab.app.data.remote.dto.gitea.GiteaIssue
+import com.homelab.app.data.remote.dto.gitea.GiteaRepo
 import com.homelab.app.data.repository.GiteaRepository
 import com.homelab.app.util.ErrorHandler
+import com.homelab.app.util.Logger
 import com.homelab.app.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import android.content.Context
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import com.homelab.app.util.Logger
-import javax.inject.Inject
 
 enum class GiteaRepoTab { FILES, COMMITS, ISSUES, BRANCHES }
 enum class GiteaViewMode { PREVIEW, CODE }
@@ -28,6 +32,7 @@ class GiteaRepoDetailViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    val instanceId: String = checkNotNull(savedStateHandle["instanceId"])
     val owner: String = checkNotNull(savedStateHandle["owner"])
     val repoName: String = checkNotNull(savedStateHandle["repo"])
 
@@ -82,12 +87,14 @@ class GiteaRepoDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             try {
-                val r = repository.getRepo(owner, repoName)
-                _branches.value = runCatching { repository.getRepoBranches(owner, repoName) }.getOrDefault(emptyList())
-                _uiState.value = UiState.Success(r)
+                val repo = repository.getRepo(instanceId, owner, repoName)
+                _branches.value = runCatching {
+                    repository.getRepoBranches(instanceId, owner, repoName)
+                }.getOrDefault(emptyList())
+                _uiState.value = UiState.Success(repo)
                 fetchFiles()
-            } catch (e: Exception) {
-                _uiState.value = UiState.Error(ErrorHandler.getMessage(context, e))
+            } catch (error: Exception) {
+                _uiState.value = UiState.Error(ErrorHandler.getMessage(context, error))
             }
         }
     }
@@ -120,28 +127,19 @@ class GiteaRepoDetailViewModel @Inject constructor(
     fun navigateUp() {
         val current = _currentPath.value
         if (current.isEmpty()) return
-        
+
         if (_viewingFile.value != null) {
             _viewingFile.value = null
-            val parts = current.split("/")
-            if (parts.size <= 1) {
-                _currentPath.value = ""
-                fetchFiles("")
-            } else {
-                val upPath = parts.dropLast(1).joinToString("/")
-                _currentPath.value = upPath
-                fetchFiles(upPath)
-            }
+        }
+
+        val parts = current.split("/")
+        if (parts.size <= 1) {
+            _currentPath.value = ""
+            fetchFiles("")
         } else {
-            val parts = current.split("/")
-            if (parts.size <= 1) {
-                _currentPath.value = ""
-                fetchFiles("")
-            } else {
-                val upPath = parts.dropLast(1).joinToString("/")
-                _currentPath.value = upPath
-                fetchFiles(upPath)
-            }
+            val upPath = parts.dropLast(1).joinToString("/")
+            _currentPath.value = upPath
+            fetchFiles(upPath)
         }
     }
 
@@ -168,21 +166,19 @@ class GiteaRepoDetailViewModel @Inject constructor(
             _viewingFile.value = null
             _actionError.value = null
             try {
-                val contents = repository.getRepoContents(owner, repoName, path, effectiveBranch)
-                // Sort folders first
-                _files.value = contents.sortedWith(compareBy<GiteaFileContent> { !it.isDirectory }.thenBy { it.name.lowercase() })
-                
-                if (path.isEmpty()) {
-                    try {
-                        _readme.value = repository.getRepoReadme(owner, repoName, effectiveBranch)
-                    } catch (e: Exception) {
-                        _readme.value = null
-                    }
+                _files.value = repository
+                    .getRepoContents(instanceId, owner, repoName, path, effectiveBranch)
+                    .sortedWith(compareBy<GiteaFileContent> { !it.isDirectory }.thenBy { it.name.lowercase() })
+
+                _readme.value = if (path.isEmpty()) {
+                    runCatching {
+                        repository.getRepoReadme(instanceId, owner, repoName, effectiveBranch)
+                    }.getOrNull()
                 } else {
-                    _readme.value = null
+                    null
                 }
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
                 _files.value = emptyList()
             } finally {
                 _isLoadingContent.value = false
@@ -195,9 +191,9 @@ class GiteaRepoDetailViewModel @Inject constructor(
             _isLoadingContent.value = true
             _actionError.value = null
             try {
-                _viewingFile.value = repository.getFileContent(owner, repoName, path, effectiveBranch)
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                _viewingFile.value = repository.getFileContent(instanceId, owner, repoName, path, effectiveBranch)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             } finally {
                 _isLoadingContent.value = false
             }
@@ -209,9 +205,9 @@ class GiteaRepoDetailViewModel @Inject constructor(
             _isLoadingContent.value = true
             _actionError.value = null
             try {
-                _commits.value = repository.getRepoCommits(owner, repoName, ref = effectiveBranch)
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                _commits.value = repository.getRepoCommits(instanceId, owner, repoName, ref = effectiveBranch)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             } finally {
                 _isLoadingContent.value = false
             }
@@ -223,9 +219,9 @@ class GiteaRepoDetailViewModel @Inject constructor(
             _isLoadingContent.value = true
             _actionError.value = null
             try {
-                _issues.value = repository.getRepoIssues(owner, repoName)
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                _issues.value = repository.getRepoIssues(instanceId, owner, repoName)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             } finally {
                 _isLoadingContent.value = false
             }
@@ -237,9 +233,9 @@ class GiteaRepoDetailViewModel @Inject constructor(
             _isLoadingContent.value = true
             _actionError.value = null
             try {
-                _branches.value = repository.getRepoBranches(owner, repoName)
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                _branches.value = repository.getRepoBranches(instanceId, owner, repoName)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             } finally {
                 _isLoadingContent.value = false
             }

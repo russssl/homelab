@@ -1,29 +1,48 @@
 package com.homelab.app.ui.pihole
 
+import android.content.Context
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.homelab.app.data.remote.dto.pihole.*
+import com.homelab.app.data.remote.dto.pihole.PiholeBlockingStatus
+import com.homelab.app.data.remote.dto.pihole.PiholeDomainDto
+import com.homelab.app.data.remote.dto.pihole.PiholeDomainListType
+import com.homelab.app.data.remote.dto.pihole.PiholeHistoryEntry
+import com.homelab.app.data.remote.dto.pihole.PiholeQueryLogEntry
+import com.homelab.app.data.remote.dto.pihole.PiholeStats
+import com.homelab.app.data.remote.dto.pihole.PiholeTopClient
+import com.homelab.app.data.remote.dto.pihole.PiholeTopItem
 import com.homelab.app.data.repository.PiholeRepository
+import com.homelab.app.data.repository.ServicesRepository
+import com.homelab.app.domain.model.ServiceInstance
 import com.homelab.app.util.ErrorHandler
+import com.homelab.app.util.Logger
+import com.homelab.app.util.ServiceType
 import com.homelab.app.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
-import com.homelab.app.util.Logger
 import java.util.Date
 import javax.inject.Inject
-import android.content.Context
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class PiholeViewModel @Inject constructor(
     private val repository: PiholeRepository,
+    private val servicesRepository: ServicesRepository,
+    savedStateHandle: SavedStateHandle,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    val instanceId: String = checkNotNull(savedStateHandle["instanceId"])
 
     private val _stats = MutableStateFlow<PiholeStats?>(null)
     val stats: StateFlow<PiholeStats?> = _stats
@@ -52,11 +71,17 @@ class PiholeViewModel @Inject constructor(
     private val _queriesState = MutableStateFlow<UiState<List<PiholeQueryLogEntry>>>(UiState.Loading)
     val queriesState: StateFlow<UiState<List<PiholeQueryLogEntry>>> = _queriesState
 
+    private var queryFetchJob: Job? = null
+
     private val _isToggling = MutableStateFlow(false)
     val isToggling: StateFlow<Boolean> = _isToggling
 
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError
+
+    val instances: StateFlow<List<ServiceInstance>> = servicesRepository.instancesByType
+        .map { it[ServiceType.PIHOLE].orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         _uiState.onEach { Logger.stateTransition("PiholeViewModel", "uiState", it) }.launchIn(viewModelScope)
@@ -68,29 +93,33 @@ class PiholeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             try {
-                // Critical requests first
-                val s = repository.getStats()
-                val b = repository.getBlockingStatus()
-                
-                _stats.value = s
-                _blocking.value = b
+                val statsResult = repository.getStats(instanceId)
+                val blockingResult = repository.getBlockingStatus(instanceId)
 
-                // Parallel non-critical requests
-                val tbDeferred = async { runCatching { repository.getTopBlocked(8) }.getOrDefault(emptyList()) }
-                val tdDeferred = async { runCatching { repository.getTopDomains(10) }.getOrDefault(emptyList()) }
-                val tcDeferred = async { runCatching { repository.getTopClients(10) }.getOrDefault(emptyList()) }
-                val qhDeferred = async { runCatching { repository.getQueryHistory() }.getOrNull() }
+                _stats.value = statsResult
+                _blocking.value = blockingResult
 
-                _topBlocked.value = tbDeferred.await()
-                _topDomains.value = tdDeferred.await()
-                _topClients.value = tcDeferred.await()
-                _history.value = qhDeferred.await()?.history ?: emptyList()
-                
+                val topBlockedDeferred = async { runCatching { repository.getTopBlocked(instanceId, 8) }.getOrDefault(emptyList()) }
+                val topDomainsDeferred = async { runCatching { repository.getTopDomains(instanceId, 10) }.getOrDefault(emptyList()) }
+                val topClientsDeferred = async { runCatching { repository.getTopClients(instanceId, 10) }.getOrDefault(emptyList()) }
+                val historyDeferred = async { runCatching { repository.getQueryHistory(instanceId) }.getOrNull() }
+
+                _topBlocked.value = topBlockedDeferred.await()
+                _topDomains.value = topDomainsDeferred.await()
+                _topClients.value = topClientsDeferred.await()
+                _history.value = historyDeferred.await()?.history ?: emptyList()
+
                 _uiState.value = UiState.Success(Unit)
-            } catch (e: Exception) {
-                val message = ErrorHandler.getMessage(context, e)
+            } catch (error: Exception) {
+                val message = ErrorHandler.getMessage(context, error)
                 _uiState.value = UiState.Error(message, retryAction = { fetchAll() })
             }
+        }
+    }
+
+    fun setPreferredInstance(newInstanceId: String) {
+        viewModelScope.launch {
+            servicesRepository.setPreferredInstance(ServiceType.PIHOLE, newInstanceId)
         }
     }
 
@@ -102,15 +131,14 @@ class PiholeViewModel @Inject constructor(
             _isToggling.value = true
             try {
                 if (timer != null) {
-                    repository.setBlocking(enabled = false, timer = timer)
+                    repository.setBlocking(instanceId, enabled = false, timer = timer)
                 } else {
-                    repository.setBlocking(enabled = !currentEnabled)
+                    repository.setBlocking(instanceId, enabled = !currentEnabled)
                 }
-                _blocking.value = repository.getBlockingStatus()
-                _stats.value = repository.getStats()
-            } catch (e: Exception) {
-                val message = ErrorHandler.getMessage(context, e)
-                _actionError.value = message
+                _blocking.value = repository.getBlockingStatus(instanceId)
+                _stats.value = repository.getStats(instanceId)
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             } finally {
                 _isToggling.value = false
             }
@@ -123,10 +151,9 @@ class PiholeViewModel @Inject constructor(
                 _domainsState.value = UiState.Loading
             }
             try {
-                val d = repository.getDomains()
-                _domainsState.value = UiState.Success(d)
-            } catch (e: Exception) {
-                val message = ErrorHandler.getMessage(context, e)
+                _domainsState.value = UiState.Success(repository.getDomains(instanceId))
+            } catch (error: Exception) {
+                val message = ErrorHandler.getMessage(context, error)
                 _domainsState.value = UiState.Error(message, retryAction = { fetchDomains() })
             }
         }
@@ -135,10 +162,10 @@ class PiholeViewModel @Inject constructor(
     fun addDomain(domain: String, listType: PiholeDomainListType) {
         viewModelScope.launch {
             try {
-                repository.addDomain(domain, listType)
-                _domainsState.value = UiState.Success(repository.getDomains())
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                repository.addDomain(instanceId, domain, listType)
+                _domainsState.value = UiState.Success(repository.getDomains(instanceId))
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             }
         }
     }
@@ -146,10 +173,10 @@ class PiholeViewModel @Inject constructor(
     fun removeDomain(domain: String, listType: PiholeDomainListType) {
         viewModelScope.launch {
             try {
-                repository.removeDomain(domain, listType)
-                _domainsState.value = UiState.Success(repository.getDomains())
-            } catch (e: Exception) {
-                _actionError.value = ErrorHandler.getMessage(context, e)
+                repository.removeDomain(instanceId, domain, listType)
+                _domainsState.value = UiState.Success(repository.getDomains(instanceId))
+            } catch (error: Exception) {
+                _actionError.value = ErrorHandler.getMessage(context, error)
             }
         }
     }
@@ -159,33 +186,30 @@ class PiholeViewModel @Inject constructor(
     }
 
     fun fetchRecentQueries(windowSeconds: Long = 15 * 60) {
-        viewModelScope.launch {
+        if (queryFetchJob?.isActive == true) return
+        queryFetchJob = viewModelScope.launch {
             val until = Date().time / 1000
             val currentQueries = (_queriesState.value as? UiState.Success)?.data ?: emptyList()
-            
             if (currentQueries.isEmpty() && _queriesState.value !is UiState.Success) {
                 _queriesState.value = UiState.Loading
             }
-            
-            val from = if (currentQueries.isEmpty()) {
-                until - windowSeconds
-            } else {
-                (until - 90).coerceAtLeast(0)
-            }
+
+            val from = if (currentQueries.isEmpty()) until - windowSeconds else (until - 90).coerceAtLeast(0)
             try {
-                val fetched = repository.getQueries(from = from, until = until)
-                val merged = (currentQueries + fetched)
-                    .distinctBy { it.id }
-                    .sortedByDescending { it.timestamp }
-                    .take(500)
-                _queriesState.value = UiState.Success(merged)
-            } catch (e: Exception) {
+                val fetched = repository.getQueries(instanceId, from = from, until = until)
+                _queriesState.value = UiState.Success(
+                    (currentQueries + fetched)
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.timestamp }
+                        .take(500)
+                )
+            } catch (error: Exception) {
                 if (currentQueries.isEmpty()) {
-                    val message = ErrorHandler.getMessage(context, e)
+                    val message = ErrorHandler.getMessage(context, error)
                     _queriesState.value = UiState.Error(message, retryAction = { fetchRecentQueries() })
-                } else {
-                    // Just silently fail if we already have queries showing and polling fails
                 }
+            } finally {
+                queryFetchJob = null
             }
         }
     }

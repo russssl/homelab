@@ -1,11 +1,14 @@
 package com.homelab.app.ui.home
 
-import androidx.compose.animation.core.Spring
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,23 +17,31 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Source
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,71 +53,114 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil3.compose.AsyncImage
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.repeatOnLifecycle
 import com.homelab.app.R
+import com.homelab.app.domain.model.ServiceInstance
 import com.homelab.app.ui.theme.StatusGreen
-import com.homelab.app.ui.theme.isThemeDark
+import com.homelab.app.ui.theme.backgroundColor
+import com.homelab.app.ui.theme.iconUrl
 import com.homelab.app.ui.theme.primaryColor
 import com.homelab.app.util.ServiceType
-import java.text.NumberFormat
-import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
-    onNavigateToService: (ServiceType) -> Unit,
-    onNavigateToLogin: (ServiceType) -> Unit
+    onNavigateToService: (ServiceType, String) -> Unit,
+    onNavigateToLogin: (ServiceType, String?) -> Unit
 ) {
     val reachability by viewModel.reachability.collectAsStateWithLifecycle()
     val pinging by viewModel.pinging.collectAsStateWithLifecycle()
     val connectedCount by viewModel.connectedCount.collectAsStateWithLifecycle()
     val isTailscaleConnected by viewModel.isTailscaleConnected.collectAsStateWithLifecycle()
     val hiddenServices by viewModel.hiddenServices.collectAsStateWithLifecycle()
+    val serviceOrder by viewModel.serviceOrder.collectAsStateWithLifecycle()
+    val instancesByType by viewModel.instancesByType.collectAsStateWithLifecycle()
+    val preferredInstanceIds by viewModel.preferredInstanceIdByType.collectAsStateWithLifecycle()
+    val portainerSummary by viewModel.portainerSummary.collectAsStateWithLifecycle()
+    val piholeSummary by viewModel.piholeSummary.collectAsStateWithLifecycle()
+    val beszelSummary by viewModel.beszelSummary.collectAsStateWithLifecycle()
+    val giteaSummary by viewModel.giteaSummary.collectAsStateWithLifecycle()
+    var showReorderDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Effetto per il refresh all'apertura
+    val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(Unit) {
-        viewModel.checkAllReachability()
-        viewModel.fetchSummaryData()
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                viewModel.checkAllReachability()
+                viewModel.fetchSummaryData()
+                delay(180_000L)
+            }
+        }
+    }
+
+
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            // Construct refresh key INSIDE snapshotFlow so Compose tracks all dependencies
+            serviceOrder.map { type ->
+                val id = preferredInstanceIds[type]
+                "${type.name}:$id:${reachability[id]}"
+            }.joinToString("|")
+        }
+        .distinctUntilChanged()
+        .debounce(1500L)
+        .collect {
+            viewModel.fetchSummaryData()
+        }
+    }
+
+    val visibleTypes = serviceOrder.filter { !hiddenServices.contains(it.name) }
+    val hasUnreachableInstance = instancesByType.values.flatten().any { instance ->
+        reachability[instance.id] == false
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.systemBars
     ) { paddingValues ->
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 24.dp, top = 16.dp)
         ) {
-            
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.displayMedium.copy(
@@ -115,74 +169,281 @@ fun HomeScreen(
                         ),
                         color = MaterialTheme.colorScheme.onBackground
                     )
-                }
 
-                // Connected Badge
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = CircleShape
-                ) {
-                    Text(
-                        text = "$connectedCount/4",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // Determine if ANY active, un-hidden service is currently down
-            val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
-            
-            val hasUnreachableService = ServiceType.entries.filter { 
-                it != ServiceType.UNKNOWN && !hiddenServices.contains(it.name) 
-            }.any { type ->
-                connectionStatus[type] == true && reachability[type] == false
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            if (hasUnreachableService || isTailscaleConnected) {
-                TailscaleCard(isConnected = isTailscaleConnected)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // Grid Component (M3 Expressive Bouncy Cards)
-            val services = ServiceType.entries.filter { it != ServiceType.UNKNOWN && !hiddenServices.contains(it.name) }
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                val rows = services.chunked(2)
-                rows.forEach { rowServices ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        rowServices.forEach { type ->
-                            val isConnected = connectionStatus[type] ?: false
-                            val isReachable = reachability[type]
-                            val isPinging = pinging[type] ?: false
-
-                            Box(modifier = Modifier.weight(1f)) {
-                                ServiceCard(
-                                    type = type,
-                                    isConnected = isConnected,
-                                    isReachable = isReachable,
-                                    isPinging = isPinging,
-                                    onClick = {
-                                        if (isConnected) onNavigateToService(type) else onNavigateToLogin(type)
-                                    },
-                                    onRefresh = { viewModel.checkReachability(type) }
-                                )
-                            }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = "$connectedCount",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        if (rowServices.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
+
+                        FilledTonalIconButton(onClick = { showReorderDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.SwapVert,
+                                contentDescription = stringResource(R.string.home_reorder_services)
+                            )
                         }
                     }
                 }
             }
 
-            DashboardSummary(viewModel)
+            if (hasUnreachableInstance || isTailscaleConnected) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    TailscaleCard(isConnected = isTailscaleConnected)
+                }
+            }
 
-            Spacer(modifier = Modifier.height(40.dp))
-            Text(stringResource(R.string.home_summary_count).format(connectedCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), textAlign = TextAlign.Center)
+            visibleTypes.forEach { type ->
+                val instances = instancesByType[type].orEmpty()
+
+                if (instances.isEmpty()) {
+                    item {
+                        ConnectInstanceCard(type = type, onClick = { onNavigateToLogin(type, null) })
+                    }
+                } else {
+                    items(instances, key = { it.id }) { instance ->
+                        InstanceCard(
+                            type = type,
+                            instance = instance,
+                            isPreferred = instance.id == preferredInstanceIds[type],
+                            isReachable = reachability[instance.id],
+                            isPinging = pinging[instance.id] == true,
+                            onOpen = { onNavigateToService(type, instance.id) },
+                            onRefresh = { viewModel.checkReachability(instance.id) }
+                        )
+                    }
+                }
+            }
+
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                DashboardSummary(
+                    serviceOrder = serviceOrder,
+                    portainer = portainerSummary,
+                    pihole = piholeSummary,
+                    beszel = beszelSummary,
+                    gitea = giteaSummary
+                )
+            }
+
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = stringResource(R.string.home_summary_count).format(connectedCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+
+    if (showReorderDialog) {
+        ServiceOrderDialog(
+            serviceOrder = serviceOrder,
+            onMoveUp = { type -> viewModel.moveService(type, -1) },
+            onMoveDown = { type -> viewModel.moveService(type, 1) },
+            onDismiss = { showReorderDialog = false }
+        )
+    }
+}
+
+
+
+@Composable
+private fun InstanceCard(
+    type: ServiceType,
+    instance: ServiceInstance,
+    isPreferred: Boolean,
+    isReachable: Boolean?,
+    isPinging: Boolean,
+    onOpen: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    val statusColor = when (isReachable) {
+        true -> StatusGreen
+        false -> MaterialTheme.colorScheme.error
+        null -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val statusLabel = when (isReachable) {
+        true -> stringResource(R.string.home_status_online)
+        false -> stringResource(R.string.home_status_offline)
+        null -> stringResource(R.string.home_verifying)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .clickable(onClick = onOpen)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = type.backgroundColor,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AsyncImage(
+                            model = type.iconUrl,
+                            contentDescription = type.displayName,
+                            modifier = Modifier.size(36.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(1f))
+                
+                if (isReachable == false) {
+                    Surface(
+                        shape = CircleShape,
+                        color = type.primaryColor.copy(alpha = 0.1f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        IconButton(onClick = onRefresh) {
+                            val rotation by animateFloatAsState(
+                                targetValue = if (isPinging) 360f else 0f,
+                                animationSpec = if (isPinging) infiniteRepeatable(tween(1000, easing = LinearEasing)) else tween(300),
+                                label = "refresh_rotation"
+                            )
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.refresh),
+                                tint = type.primaryColor,
+                                modifier = Modifier.graphicsLayer(rotationZ = rotation)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Text(
+                text = instance.label.ifBlank { type.displayName },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = statusColor.copy(alpha = 0.15f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(statusColor, CircleShape)
+                        )
+                        Text(
+                            text = statusLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = statusColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (isPreferred) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_default_badge),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectInstanceCard(
+    type: ServiceType,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = type.backgroundColor,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Add, 
+                            contentDescription = stringResource(R.string.settings_add_instance),
+                            tint = type.primaryColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_connect_service, type.displayName),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
         }
     }
 }
@@ -190,53 +451,11 @@ fun HomeScreen(
 @Composable
 fun TailscaleCard(isConnected: Boolean) {
     val context = LocalContext.current
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    var isPressed by remember { mutableStateOf(false) }
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "ts_card_bounce"
-    )
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clip(RoundedCornerShape(24.dp))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        tryAwaitRelease()
-                        isPressed = false
-
-                        val launchIntent =
-                            context.packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
-                                ?: context.packageManager.getLaunchIntentForPackage("com.tailscale.ipn.beta")
-                        if (launchIntent != null) {
-                            context.startActivity(launchIntent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-                        } else {
-                            try {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("tailscale://app")))
-                            } catch (e: ActivityNotFoundException) {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.tailscale.ipn")))
-                                } catch (e: ActivityNotFoundException) {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.tailscale.ipn")))
-                                }
-                            }
-                        }
-                    }
-                )
-            },
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 0.dp
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -251,256 +470,296 @@ fun TailscaleCard(isConnected: Boolean) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Default.Security,
-                        contentDescription = "Tailscale",
+                        contentDescription = stringResource(R.string.tailscale_open),
                         tint = Color.White,
                         modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable {
+                        val launchIntent =
+                            context.packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
+                                ?: context.packageManager.getLaunchIntentForPackage("com.tailscale.ipn.beta")
+                        if (launchIntent != null) {
+                            context.startActivity(launchIntent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                        } else {
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("tailscale://app")))
+                            } catch (_: ActivityNotFoundException) {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.tailscale.ipn")))
+                                } catch (_: ActivityNotFoundException) {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://play.google.com/store/apps/details?id=com.tailscale.ipn")
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+            ) {
                 Text(
                     text = stringResource(R.string.tailscale_open),
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = stringResource(R.string.tailscale_tap_to_open),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Status badge
             val statusColor = if (isConnected) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = statusColor.copy(alpha = 0.1f)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(statusColor))
-                    Text(
-                        text = stringResource(if (isConnected) R.string.tailscale_connected else R.string.tailscale_not_connected),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun DashboardSummary(viewModel: HomeViewModel) {
-    val portainer by viewModel.portainerSummary.collectAsStateWithLifecycle()
-    val pihole by viewModel.piholeSummary.collectAsStateWithLifecycle()
-    val beszel by viewModel.beszelSummary.collectAsStateWithLifecycle()
-    val gitea by viewModel.giteaSummary.collectAsStateWithLifecycle()
-    val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
-
-    val hasAny = connectionStatus.values.any { it }
-
-    if (hasAny) {
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(stringResource(R.string.home_summary_title), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Column(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (connectionStatus[ServiceType.PORTAINER] == true) {
-                SummaryRow(title = stringResource(R.string.portainer_containers), value = portainer?.running?.toString() ?: "—", subValue = portainer?.let { "/ ${it.total}" }, icon = Icons.Default.Widgets, color = ServiceType.PORTAINER.primaryColor)
-            }
-            if (connectionStatus[ServiceType.PIHOLE] == true) {
-                val q = pihole?.totalQueries
-                val formattedStr = if(q != null) NumberFormat.getInstance(Locale.ITALY).format(q) else "—"
-                SummaryRow(title = stringResource(R.string.pihole_total_queries), value = formattedStr, subValue = null, icon = Icons.Default.Security, color = ServiceType.PIHOLE.primaryColor)
-            }
-            if (connectionStatus[ServiceType.BESZEL] == true) {
-                SummaryRow(title = stringResource(R.string.beszel_systems_online), value = beszel?.online?.toString() ?: "—", subValue = beszel?.let { "/ ${it.total}" }, icon = Icons.Default.Storage, color = ServiceType.BESZEL.primaryColor)
-            }
-            if (connectionStatus[ServiceType.GITEA] == true) {
-                SummaryRow(title = stringResource(R.string.gitea_repos), value = gitea?.totalRepos?.toString() ?: "—", subValue = null, icon = Icons.Default.Source, color = ServiceType.GITEA.primaryColor)
-            }
-        }
-    }
-}
-
-@Composable
-fun SummaryRow(title: String, value: String, subValue: String?, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.15f), modifier = Modifier.size(42.dp)) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.padding(10.dp))
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
-                if (subValue != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(subValue, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
-                }
-            }
-            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-fun ServiceCard(
-    type: ServiceType,
-    isConnected: Boolean,
-    isReachable: Boolean?,
-    isPinging: Boolean,
-    onClick: () -> Unit,
-    onRefresh: () -> Unit
-) {
-    // M3 Expressive Spring animation state
-    var isPressed by remember { mutableStateOf(false) }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "card_bounce"
-    )
-
-    // Base colors based on type (simulating iOS theme)
-    val cardBgColor = MaterialTheme.colorScheme.surfaceContainerLow
-    val iconColor = type.primaryColor
-    val iconBgColor = iconColor.copy(alpha = 0.15f)
-
-    val serviceIcon = when(type) {
-        ServiceType.PORTAINER -> Icons.Default.Widgets
-        ServiceType.PIHOLE -> Icons.Default.Security
-        ServiceType.BESZEL -> Icons.Default.Storage
-        ServiceType.GITEA -> Icons.Default.Source
-        else -> Icons.Default.Widgets
-    }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(130.dp)
-            .scale(scale)
-            .clip(RoundedCornerShape(24.dp))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onClick()
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(statusColor, CircleShape)
                 )
-            },
-        color = cardBgColor,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 0.dp
+                Text(
+                    text = stringResource(
+                        if (isConnected) R.string.tailscale_connected else R.string.tailscale_not_connected
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServiceOrderDialog(
+    serviceOrder: List<ServiceType>,
+    onMoveUp: (ServiceType) -> Unit,
+    onMoveDown: (ServiceType) -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.home_reorder_services)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                serviceOrder.forEachIndexed { index, type ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = type.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { onMoveUp(type) },
+                            enabled = index > 0
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = stringResource(R.string.settings_move_up)
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveDown(type) },
+                            enabled = index < serviceOrder.lastIndex
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = stringResource(R.string.settings_move_down)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        }
+    )
+}
+
+@Composable
+private fun DashboardSummary(
+    serviceOrder: List<ServiceType>,
+    portainer: HomeViewModel.PortainerSummary?,
+    pihole: HomeViewModel.PiholeSummary?,
+    beszel: HomeViewModel.BeszelSummary?,
+    gitea: HomeViewModel.GiteaSummary?
+) {
+    // Don't show if no services are defined in order
+    if (serviceOrder.isEmpty()) return
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = stringResource(R.string.home_summary_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // We only show summaries for services that are actually in the service order
+        val availableSummaries = serviceOrder.map { type ->
+            val summary = when (type) {
+                ServiceType.PORTAINER -> portainer
+                ServiceType.PIHOLE -> pihole
+                ServiceType.BESZEL -> beszel
+                ServiceType.GITEA -> gitea
+                else -> null
+            }
+            type to summary
+        }
+
+        availableSummaries.chunked(2).forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Icon
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = iconBgColor,
-                    modifier = Modifier.size(42.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            serviceIcon,
-                            contentDescription = type.name,
-                            tint = iconColor,
-                            modifier = Modifier.size(22.dp)
-                        )
+                rowItems.forEach { (type, summary) ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (summary != null) {
+                            when (type) {
+                                ServiceType.PORTAINER -> {
+                                    val s = summary as HomeViewModel.PortainerSummary
+                                    DashboardSummaryCard(
+                                        type = type,
+                                        value = "${s.running}/${s.total}",
+                                        label = stringResource(R.string.portainer_containers)
+                                    )
+                                }
+                                ServiceType.PIHOLE -> {
+                                    val s = summary as HomeViewModel.PiholeSummary
+                                    DashboardSummaryCard(
+                                        type = type,
+                                        value = s.totalQueries.toString(),
+                                        label = stringResource(R.string.pihole_total_queries)
+                                    )
+                                }
+                                ServiceType.BESZEL -> {
+                                    val s = summary as HomeViewModel.BeszelSummary
+                                    DashboardSummaryCard(
+                                        type = type,
+                                        value = "${s.online}/${s.total}",
+                                        label = stringResource(R.string.beszel_systems_online)
+                                    )
+                                }
+                                ServiceType.GITEA -> {
+                                    val s = summary as HomeViewModel.GiteaSummary
+                                    DashboardSummaryCard(
+                                        type = type,
+                                        value = s.totalRepos.toString(),
+                                        label = pluralStringResource(R.plurals.home_summary_gitea, s.totalRepos, s.totalRepos)
+                                    )
+                                }
+                                else -> {}
+                            }
+                        } else {
+                            // Placeholder while loading
+                            DashboardSummaryCard(
+                                type = type,
+                                value = "...",
+                                label = ""
+                            )
+                        }
                     }
                 }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
 
-                // Refresh Button or Status icon
-                if (isConnected && isReachable == false) {
-                    val rotation by animateFloatAsState(
-                        targetValue = if (isPinging) 360f else 0f,
-                        animationSpec = spring(stiffness = Spring.StiffnessLow),
-                        label = "spin_refresh"
-                    )
-                    IconButton(
-                        onClick = onRefresh,
-                        modifier = Modifier.size(32.dp).rotate(rotation)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.refresh),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else if (isConnected && isReachable == null) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
+@Composable
+private fun typeInitial(type: ServiceType): String {
+    return type.displayName.first().toString()
+}
+
+@Composable
+private fun DashboardSummaryCard(
+    type: ServiceType,
+    value: String,
+    label: String
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = type.backgroundColor,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    AsyncImage(
+                        model = type.iconUrl,
+                        contentDescription = type.displayName,
+                        modifier = Modifier.size(36.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = type.name.lowercase().replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
                 )
-
-                // Status Badge
-                val badgeBg = if (!isConnected) MaterialTheme.colorScheme.surfaceVariant
-                              else if (isReachable == false) MaterialTheme.colorScheme.errorContainer
-                              else if (isReachable == null) MaterialTheme.colorScheme.surfaceVariant
-                              else MaterialTheme.colorScheme.primaryContainer
-
-                val badgeFg = if (!isConnected) MaterialTheme.colorScheme.onSurfaceVariant
-                              else if (isReachable == false) MaterialTheme.colorScheme.onErrorContainer
-                              else if (isReachable == null) MaterialTheme.colorScheme.onSurfaceVariant
-                              else MaterialTheme.colorScheme.onPrimaryContainer
-
-                val badgeText = if (!isConnected) stringResource(R.string.home_status_unconfigured)
-                                else if (isReachable == false) "• " + stringResource(R.string.home_status_offline)
-                                else if (isReachable == null) stringResource(R.string.home_verifying)
-                                else "• " + stringResource(R.string.home_status_online)
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = badgeBg
-                ) {
-                    Text(
-                        text = badgeText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeFg,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SummaryRow(
+    title: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

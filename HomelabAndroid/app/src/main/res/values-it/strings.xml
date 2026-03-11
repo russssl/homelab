@@ -4,9 +4,11 @@
     <!-- General -->
     <string name="loading">Caricamento...</string>
     <string name="error_unknown">Errore sconosciuto</string>
+    <string name="error">Errore</string>
     <string name="error_server_unreachable">Server irraggiungibile. Controlla la rete o l\'indirizzo IP.</string>
     <string name="error_timeout">Richiesta scaduta. Il server ha impiegato troppo tempo per rispondere.</string>
     <string name="error_network">Errore di rete. Controlla la tua connessione internet.</string>
+    <string name="error_service_unavailable">Servizio non disponibile</string>
     <string name="error_invalid_credentials">Credenziali non valide. Controlla la tua API key o i dettagli di accesso.</string>
     <string name="error_forbidden">Accesso negato. Non hai i permessi per visualizzare questo contenuto.</string>
     <string name="error_not_found">Risorsa non trovata sul server.</string>
@@ -17,7 +19,7 @@
     <string name="cancel">Annulla</string>
     <string name="back">Indietro</string>
     <string name="close">Chiudi</string>
-    <string name="default_branch">default</string>
+    <string name="default_branch">predefinito</string>
     <string name="preview">Anteprima</string>
     <string name="code">Codice</string>
     <string name="copy">COPIA</string>
@@ -44,18 +46,22 @@
     <string name="home_verifying">Verifica in corso...</string>
     <string name="home_summary_title">Riepilogo</string>
     <string name="home_summary_count">Servizi • %d connessi</string>
+    <string name="home_reorder_services">Riordina servizi</string>
 
     <!-- Login Screen -->
     <string name="login_title">Connetti %s</string>
     <string name="login_url_hint">https://homelab.example.com</string>
     <string name="login_username_hint">Username / Email</string>
     <string name="login_password_hint">Password / Token</string>
+    <string name="login_show_secret">Mostra password</string>
+    <string name="login_hide_secret">Nascondi password</string>
     <string name="login_button">Accedi</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">Impostazioni</string>
     <string name="settings_support_title">Supporta il Progetto ❤️</string>
     <string name="settings_support_desc">Questa companion app è orgogliosamente Open Source e sviluppata nel mio tempo libero. Se ti è tornata utile, accetto volentieri donazioni (qualsiasi crypto su chain EVM va bene) al seguente indirizzo:</string>
+    <string name="settings_donation_clip_label">Indirizzo donazione Homelab</string>
     <string name="settings_theme_label">TEMA</string>
     <string name="settings_theme_light">Chiaro</string>
     <string name="settings_theme_dark">Scuro</string>
@@ -66,6 +72,9 @@
     <string name="settings_disconnect">Disconnetti</string>
     <string name="settings_fallback_url">Fallback URL (Es. Cloudflare)</string>
     <string name="settings_contacts_label">CONTATTI</string>
+    <string name="settings_contact_telegram">Telegram</string>
+    <string name="settings_contact_reddit">Reddit</string>
+    <string name="settings_contact_github">GitHub</string>
     <string name="settings_disconnect_confirm_title">Disconnettere %s?</string>
     <string name="settings_disconnect_confirm_desc">Dovrai rieffettuare l\'accesso inserendo URL e API Key.</string>
     <string name="settings_hide_service">Nascosto dalla Home</string>
@@ -90,9 +99,11 @@
     <string name="pihole_gravity_domains">DOMINI IN GRAVITY (BLOCCATI)</string>
     <string name="pihole_top_blocked">DOMINI PIÙ BLOCCATI</string>
     <string name="pihole_top_queries">DOMINI PIÙ RICHIESTI</string>
+    <string name="pihole_top_domains">DOMINI PRINCIPALI</string>
     <string name="pihole_top_clients">CLIENT PIÙ ATTIVI</string>
     <string name="pihole_total_suffix">%s totali</string>
     <string name="pihole_domain_management">Gestione Domini</string>
+    <string name="pihole_domain_placeholder">example.com</string>
     <string name="pihole_allowed">Consentiti</string>
     <string name="pihole_blocked_list">Bloccati</string>
     <string name="pihole_add_domain">Aggiungi Dominio</string>
@@ -186,9 +197,13 @@
     <string name="gitea_heatmap_more">Più</string>
     <string name="gitea_forks">Forks</string>
     <string name="gitea_fork">Fork</string>
+    <string name="gitea_private">Privato</string>
+    <string name="gitea_public">Pubblico</string>
     <string name="gitea_issues">Issues</string>
     <string name="gitea_stars_label">Stelle</string>
+    <string name="gitea_readme">README</string>
     <string name="gitea_no_branches">Nessun branch trovato</string>
+    <string name="protected_branch">Branch protetto</string>
     <string name="gitea_date_today">oggi</string>
     <string name="gitea_date_hours_ago">%d o fa</string>
     <string name="gitea_date_days_ago">%d g fa</string>
@@ -197,6 +212,7 @@
     <!-- Portainer -->
     <string name="portainer_endpoints">Endpoints</string>
     <string name="portainer_containers">Containers</string>
+    <string name="portainer_total">Totale</string>
     <string name="portainer_running">In esecuzione</string>
     <string name="portainer_stopped">Fermo</string>
     <string name="portainer_healthy">Sano</string>
@@ -204,8 +220,10 @@
     <string name="portainer_stats">Statistiche</string>
     <string name="portainer_logs">Log</string>
     <string name="portainer_details">Dettagli</string>
+    <string name="portainer_info_title">Info</string>
     <string name="portainer_image">Immagine</string>
     <string name="portainer_status">Stato</string>
+    <string name="portainer_active">Attivo</string>
     <string name="portainer_created">Creato</string>
     <string name="portainer_all_containers">Visualizza tutti i container</string>
     <string name="portainer_stacks">Stacks</string>
@@ -227,6 +245,10 @@
     <string name="portainer_arch_label">Arch</string>
     <string name="portainer_cpu_label">CPU</string>
     <string name="portainer_ram_label">RAM</string>
+    <string name="portainer_error_loading_details">Impossibile caricare i dettagli del container.</string>
+    <string name="portainer_error_logs_unavailable">Impossibile recuperare i log.</string>
+    <string name="portainer_error_loading_containers">Impossibile caricare i container.</string>
+    <string name="portainer_error_action_failed">Impossibile eseguire l\'azione.</string>
 
     <!-- Security -->
     <string name="security_title">Sicurezza</string>
@@ -255,6 +277,51 @@
     <!-- Tailscale -->
     <string name="tailscale_connect">Connetti a Tailscale</string>
     <string name="tailscale_desc">Apri la VPN Tailscale per accedere alla tua homelab in sicurezza</string>
+    <string name="home_default_badge">Predefinita</string>
+    <string name="home_open">Apri</string>
+    <string name="home_connect_service">Connetti %1$s</string>
+    <string name="home_summary_portainer">%1$d/%2$d container attivi</string>
+    <string name="home_summary_pihole">%1$d query</string>
+    <string name="home_summary_beszel">%1$d/%2$d sistemi online</string>
+    <plurals name="home_summary_gitea">
+        <item quantity="one">%d repository</item>
+        <item quantity="other">%d repository</item>
+    </plurals>
+    <string name="service_instances_empty">Nessuna istanza ancora. Aggiungine una per connetterti.</string>
+    <string name="service_instance_label">Istanza</string>
+    <string name="service_instance_active">Attiva</string>
+    <string name="settings_hidden_badge">Nascosto</string>
+    <string name="settings_add_instance">Aggiungi istanza</string>
+    <string name="settings_set_default">Imposta default</string>
+    <string name="settings_delete_instance_title">Eliminare %1$s?</string>
+    <string name="settings_delete_instance_message">Rimuove solo questa istanza configurata.</string>
+    <string name="settings_fallback_value">Fallback: %1$s</string>
+    <string name="settings_move_up">Sposta in alto</string>
+    <string name="settings_move_down">Sposta in basso</string>
+    <plurals name="settings_instances_available">
+        <item quantity="one">%d istanza disponibile</item>
+        <item quantity="other">%d istanze disponibili</item>
+    </plurals>
+    <string name="edit">Modifica</string>
+    <string name="action_clear">Cancella</string>
+    <string name="login_save_instance">Salva istanza</string>
+    <string name="login_edit_title">Modifica %1$s</string>
+    <string name="login_edit_subtitle">Aggiorna questa istanza configurata</string>
+    <string name="login_create_subtitle">Connetti una nuova istanza</string>
+    <string name="login_label">Etichetta</string>
+    <string name="login_instance_url">URL istanza</string>
+    <string name="login_fallback_url">URL fallback</string>
+    <string name="login_api_key_label">API Key</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_username_label">Nome utente</string>
+    <string name="login_keep_secret_placeholder">Lascia vuoto per mantenere il secret corrente se cambi solo etichetta o fallback</string>
+    <string name="login_hint_portainer_multi">Crea un access token in Portainer in My account &gt; Access tokens.</string>
+    <string name="login_hint_pihole_multi">Usa la password o il token API configurato in Pi-hole in Settings &gt; API / Web interface.</string>
+    <string name="login_hint_gitea_multi">Se il 2FA è attivo, usa un token applicazione al posto della password.</string>
+    <string name="login_error_api_key_required">API key obbligatoria.</string>
+    <string name="login_error_password_required">Password obbligatoria.</string>
+    <string name="login_error_email_required">Email obbligatoria.</string>
+    <string name="login_error_username_required">Nome utente obbligatorio.</string>
 
     <!-- Segnalibri -->
     <string name="bookmark_title">Titolo</string>
@@ -281,13 +348,20 @@
     <string name="bookmark_selfhst_preview">Anteprima da Selfh.st</string>
     <string name="bookmark_delete_confirm">Sei sicuro di voler eliminare questo segnalibro?</string>
     <string name="bookmark_search">Cerca titoli o tag...</string>
+    <string name="bookmark_toggle_view">Cambia vista</string>
     <string name="bookmark_reorder">Riordina segnalibri</string>
     <string name="bookmark_reorder_category_label">Categoria</string>
     <string name="bookmark_reorder_bookmark_label">Segnalibro</string>
+    <string name="bookmark_expand_category">Espandi categoria</string>
+    <string name="bookmark_collapse_category">Comprimi categoria</string>
+    <string name="bookmark_drag_handle">Maniglia di trascinamento</string>
+    <string name="category_icon">Icona categoria</string>
+    <string name="warning">Avviso</string>
 
     <!-- Onboarding v2 -->
     <string name="onboarding_welcome">Benvenuto</string>
     <string name="onboarding_welcome_desc">La tua casa digitale, organizzata e semplice.</string>
+    <string name="onboarding_welcome_button">Continua</string>
     <string name="onboarding_ask_pin">Vuoi impostare un codice di sblocco per proteggere l\'app?</string>
     <string name="onboarding_ask_pin_yes">Sì, imposta un codice</string>
     <string name="onboarding_ask_pin_no">No, salta per ora</string>

@@ -168,7 +168,7 @@ private fun HeaderCard(system: BeszelSystem) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         if (isUp) Icons.Default.Wifi else Icons.Default.WifiOff,
-                        contentDescription = null,
+                        contentDescription = if (isUp) stringResource(R.string.beszel_online) else stringResource(R.string.beszel_offline),
                         tint = statusColor,
                         modifier = Modifier.size(24.dp)
                     )
@@ -288,7 +288,7 @@ private fun ResourceCard(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+                        Icon(icon, contentDescription = title, tint = iconColor, modifier = Modifier.size(20.dp))
                     }
                 }
 
@@ -438,7 +438,7 @@ private fun ContainersSection(containers: List<BeszelContainer>) {
                             modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Inventory2, contentDescription = null, tint = ServiceType.BESZEL.primaryColor, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Inventory2, contentDescription = stringResource(R.string.beszel_containers_title).format(containers.count()), tint = ServiceType.BESZEL.primaryColor, modifier = Modifier.size(16.dp))
                             }
                         }
 
@@ -446,8 +446,8 @@ private fun ContainersSection(containers: List<BeszelContainer>) {
 
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val context = LocalContext.current
-                            ContainerStat(icon = Icons.Default.Memory, value = String.format("%.1f%%", container.cpuValue))
-                            ContainerStat(icon = Icons.Default.Dns, value = ResourceFormatters.formatMB(container.mValue, context))
+                            ContainerStat(icon = Icons.Default.Memory, value = String.format("%.1f%%", container.cpuValue), label = stringResource(R.string.beszel_cpu))
+                            ContainerStat(icon = Icons.Default.Dns, value = ResourceFormatters.formatMB(container.mValue, context), label = stringResource(R.string.beszel_memory))
                         }
                     }
                     if (index < containers.size - 1) {
@@ -460,9 +460,9 @@ private fun ContainersSection(containers: List<BeszelContainer>) {
 }
 
 @Composable
-private fun ContainerStat(icon: ImageVector, value: String) {
+private fun ContainerStat(icon: ImageVector, value: String, label: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, contentDescription = label, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
     }
 }
@@ -479,7 +479,7 @@ private fun UptimeCard(seconds: Double) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.Schedule, contentDescription = stringResource(R.string.beszel_uptime), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Column {
                 Text(stringResource(R.string.beszel_uptime), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(ResourceFormatters.formatUptimeHours(seconds, LocalContext.current), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -491,7 +491,7 @@ private fun UptimeCard(seconds: Double) {
 @Composable
 private fun SectionHeader(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, contentDescription = null, tint = ServiceType.BESZEL.primaryColor, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = title, tint = ServiceType.BESZEL.primaryColor, modifier = Modifier.size(16.dp))
         Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }

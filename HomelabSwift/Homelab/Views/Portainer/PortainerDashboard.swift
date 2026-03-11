@@ -3,9 +3,12 @@ import SwiftUI
 // Maps to app/portainer/index.tsx
 
 struct PortainerDashboard: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
 
+    @State private var selectedInstanceId: UUID
     @State private var endpoints: [PortainerEndpoint] = []
     @State private var selectedEndpoint: PortainerEndpoint?
     @State private var containers: [PortainerContainer] = []
@@ -13,12 +16,20 @@ struct PortainerDashboard: View {
 
     private let portainerColor = ServiceType.portainer.colors.primary
 
+    init(instanceId: UUID) {
+        self.instanceId = instanceId
+        _selectedInstanceId = State(initialValue: instanceId)
+    }
+
     var body: some View {
         ServiceDashboardLayout(
             serviceType: .portainer,
+            instanceId: selectedInstanceId,
             state: state,
             onRefresh: fetchAll
         ) {
+            instancePicker
+
             // Endpoint picker (only if multiple endpoints)
             if endpoints.count > 1 {
                 endpointPicker
@@ -34,7 +45,7 @@ struct PortainerDashboard: View {
 
             // View all button (moved here)
             if let ep = selectedEndpoint {
-                NavigationLink(value: PortainerRoute.containers(endpointId: ep.Id)) {
+                NavigationLink(value: PortainerRoute.containers(instanceId: selectedInstanceId, endpointId: ep.Id)) {
                     HStack(spacing: 8) {
                         Image(systemName: "list.bullet.indent")
                         Text(localizer.t.portainerViewAll)
@@ -42,6 +53,7 @@ struct PortainerDashboard: View {
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption.bold())
+                            .accessibilityHidden(true)
                     }
                     .foregroundStyle(portainerColor)
                     .padding(16)
@@ -59,13 +71,57 @@ struct PortainerDashboard: View {
         .navigationTitle(localizer.t.portainerDashboard)
         .navigationDestination(for: PortainerRoute.self) { route in
             switch route {
-            case .containers(let epId):
-                ContainerListView(endpointId: epId)
-            case .containerDetail(let epId, let containerId):
-                ContainerDetailView(endpointId: epId, containerId: containerId)
+            case .containers(let instanceId, let epId):
+                ContainerListView(instanceId: instanceId, endpointId: epId)
+            case .containerDetail(let instanceId, let epId, let containerId):
+                ContainerDetailView(instanceId: instanceId, endpointId: epId, containerId: containerId)
             }
         }
-        .task { await fetchAll() }
+        .task(id: selectedInstanceId) { await fetchAll() }
+    }
+
+    private var instancePicker: some View {
+        let instances = servicesStore.instances(for: .portainer)
+        return Group {
+            if instances.count > 1 {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(localizer.t.dashboardInstances)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.textMuted)
+                        .textCase(.uppercase)
+
+                    ForEach(instances) { instance in
+                        Button {
+                            HapticManager.light()
+                            selectedInstanceId = instance.id
+                            servicesStore.setPreferredInstance(id: instance.id, for: .portainer)
+                            endpoints = []
+                            selectedEndpoint = nil
+                            containers = []
+                        } label: {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(instance.id == selectedInstanceId ? portainerColor : AppTheme.textMuted.opacity(0.4))
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(instance.displayLabel)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(instance.url)
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(14)
+                            .glassCard(tint: instance.id == selectedInstanceId ? portainerColor.opacity(0.1) : nil)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Endpoint Picker
@@ -132,6 +188,7 @@ struct PortainerDashboard: View {
                         Image(systemName: ep.isOnline ? "wifi" : "wifi.slash")
                             .font(.caption2)
                             .foregroundStyle(ep.isOnline ? AppTheme.running : AppTheme.stopped)
+                            .accessibilityHidden(true)
                         Text(ep.isOnline ? localizer.t.portainerOnline : localizer.t.portainerOffline)
                             .font(.caption)
                             .foregroundStyle(ep.isOnline ? AppTheme.running : AppTheme.stopped)
@@ -288,7 +345,11 @@ struct PortainerDashboard: View {
     private func fetchAll() async {
         state = .loading
         do {
-            endpoints = try await servicesStore.portainerClient.getEndpoints()
+            guard let client = await servicesStore.portainerClient(instanceId: selectedInstanceId) else {
+                state = .error(.notConfigured)
+                return
+            }
+            endpoints = try await client.getEndpoints()
             if selectedEndpoint == nil, let first = endpoints.first {
                 selectedEndpoint = first
             }
@@ -304,7 +365,11 @@ struct PortainerDashboard: View {
     private func fetchContainers() async {
         guard let ep = selectedEndpoint else { return }
         do {
-            containers = try await servicesStore.portainerClient.getContainers(endpointId: ep.Id)
+            guard let client = await servicesStore.portainerClient(instanceId: selectedInstanceId) else {
+                state = .error(.notConfigured)
+                return
+            }
+            containers = try await client.getContainers(endpointId: ep.Id)
         } catch let apiError as APIError {
             // Keep existing containers if we have them, only show error on first load
             if containers.isEmpty {
@@ -321,6 +386,6 @@ struct PortainerDashboard: View {
 // MARK: - Navigation Routes
 
 enum PortainerRoute: Hashable {
-    case containers(endpointId: Int)
-    case containerDetail(endpointId: Int, containerId: String)
+    case containers(instanceId: UUID, endpointId: Int)
+    case containerDetail(instanceId: UUID, endpointId: Int, containerId: String)
 }

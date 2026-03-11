@@ -8,7 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homelab.app.R
 import com.homelab.app.data.remote.dto.pihole.PiholeTopClient
 import com.homelab.app.data.remote.dto.pihole.PiholeTopItem
+import com.homelab.app.ui.components.ServiceInstancePicker
 import com.homelab.app.ui.theme.primaryColor
 import com.homelab.app.ui.theme.StatusGreen
 import com.homelab.app.ui.theme.StatusRed
@@ -47,6 +50,7 @@ import java.util.*
 @Composable
 fun PiholeDashboardScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToInstance: (String) -> Unit,
     onNavigateToDomains: () -> Unit,
     onNavigateToQueryLog: () -> Unit,
     viewModel: PiholeViewModel = hiltViewModel()
@@ -60,6 +64,7 @@ fun PiholeDashboardScreen(
     val isToggling by viewModel.isToggling.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
+    val instances by viewModel.instances.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -115,15 +120,28 @@ fun PiholeDashboardScreen(
                 )
             }
             is UiState.Success -> {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ServiceInstancePicker(
+                            instances = instances,
+                            selectedInstanceId = viewModel.instanceId,
+                            onInstanceSelected = { instance ->
+                                viewModel.setPreferredInstance(instance.id)
+                                onNavigateToInstance(instance.id)
+                            }
+                        )
+                    }
+
                     // Blocking Card
-                    item {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         val isBlocking = blocking?.isEnabled == true
                         BlockingCard(
                             isBlocking = isBlocking,
@@ -134,21 +152,27 @@ fun PiholeDashboardScreen(
 
                     // Gravity info
                     if (stats != null) {
-                        item { StatsOverview(stats = stats!!) }
-                        item { QueryActivitySection(stats = stats!!) }
-                        item { GravitySection(stats = stats!!) }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = stringResource(R.string.pihole_overview_title),
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item { StatCard(icon = Icons.Default.Search, iconBg = ServiceType.PIHOLE.primaryColor, value = formatNum(stats!!.queries.total), label = stringResource(R.string.pihole_total_queries)) }
+                        item { StatCard(icon = Icons.Default.PanTool, iconBg = StatusRed, value = formatNum(stats!!.queries.blocked), label = stringResource(R.string.pihole_blocked)) }
+                        item { StatCard(icon = Icons.Default.BarChart, iconBg = StatusOrange, value = String.format("%.1f%%", stats!!.queries.percent_blocked), label = stringResource(R.string.pihole_percentage)) }
+                        item { StatCard(icon = Icons.Default.Language, iconBg = StatusBlue, value = formatNum(stats!!.queries.unique_domains), label = stringResource(R.string.pihole_domains)) }
+
+                        item(span = { GridItemSpan(maxLineSpan) }) { QueryActivitySection(stats = stats!!) }
+                        item(span = { GridItemSpan(maxLineSpan) }) { GravitySection(stats = stats!!) }
                     }
 
-                    item {
-                        DomainManagementLink(onClick = onNavigateToDomains)
-                    }
-
-                    item {
-                        QueryLogLink(onClick = onNavigateToQueryLog)
-                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) { DomainManagementLink(onClick = onNavigateToDomains) }
+                    item(span = { GridItemSpan(maxLineSpan) }) { QueryLogLink(onClick = onNavigateToQueryLog) }
 
                     if (topBlocked.isNotEmpty()) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             TopListSection(
                                 title = stringResource(R.string.pihole_top_blocked),
                                 items = topBlocked,
@@ -158,13 +182,13 @@ fun PiholeDashboardScreen(
                     }
 
                     if (topDomains.isNotEmpty()) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             TopDomainsSection(topDomains = topDomains)
                         }
                     }
 
                     if (topClients.isNotEmpty()) {
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             TopClientsSection(topClients = topClients)
                         }
                     }
@@ -258,7 +282,7 @@ private fun BlockingCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
     )
 
     val runColor = StatusGreen
@@ -297,7 +321,7 @@ private fun BlockingCard(
             ) {
                 Icon(
                     if (isBlocking) Icons.Default.Shield else Icons.Default.GppBad,
-                    contentDescription = null,
+                    contentDescription = if (isBlocking) stringResource(R.string.pihole_status_active) else stringResource(R.string.pihole_status_disabled),
                     tint = color,
                     modifier = Modifier.padding(14.dp)
                 )
@@ -347,7 +371,7 @@ private fun DomainManagementLink(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = RoundedCornerShape(10.dp), color = ServiceType.PIHOLE.primaryColor.copy(alpha = 0.1f), modifier = Modifier.size(36.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null, tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = stringResource(R.string.pihole_domain_management), tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(8.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Text(
@@ -355,7 +379,7 @@ private fun DomainManagementLink(onClick: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.weight(1f)
             )
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.pihole_domain_management), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -374,7 +398,7 @@ private fun QueryLogLink(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = RoundedCornerShape(10.dp), color = StatusBlue.copy(alpha = 0.1f), modifier = Modifier.size(36.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null, tint = StatusBlue, modifier = Modifier.padding(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = stringResource(R.string.pihole_query_log), tint = StatusBlue, modifier = Modifier.padding(8.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Text(
@@ -382,40 +406,21 @@ private fun QueryLogLink(onClick: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.weight(1f)
             )
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.pihole_query_log), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun StatsOverview(stats: com.homelab.app.data.remote.dto.pihole.PiholeStats) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = stringResource(R.string.pihole_overview_title),
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard(modifier = Modifier.weight(1f), icon = Icons.Default.Search, iconBg = ServiceType.PIHOLE.primaryColor, value = formatNum(stats.queries.total), label = stringResource(R.string.pihole_total_queries))
-            StatCard(modifier = Modifier.weight(1f), icon = Icons.Default.PanTool, iconBg = StatusRed, value = formatNum(stats.queries.blocked), label = stringResource(R.string.pihole_blocked))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard(modifier = Modifier.weight(1f), icon = Icons.Default.BarChart, iconBg = StatusOrange, value = String.format("%.1f%%", stats.queries.percent_blocked), label = stringResource(R.string.pihole_percentage))
-            StatCard(modifier = Modifier.weight(1f), icon = Icons.Default.Language, iconBg = StatusBlue, value = formatNum(stats.queries.unique_domains), label = stringResource(R.string.pihole_domains))
-        }
-    }
-}
-
-@Composable
-private fun StatCard(modifier: Modifier = Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector, iconBg: Color, value: String, label: String) {
+private fun StatCard(icon: androidx.compose.ui.graphics.vector.ImageVector, iconBg: Color, value: String, label: String) {
     Surface(
-        modifier = modifier,
+        modifier = Modifier,
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Surface(shape = RoundedCornerShape(10.dp), color = iconBg.copy(alpha = 0.1f), modifier = Modifier.size(36.dp)) {
-                Icon(icon, contentDescription = null, tint = iconBg, modifier = Modifier.padding(8.dp))
+                Icon(icon, contentDescription = label, tint = iconBg, modifier = Modifier.padding(8.dp))
             }
             Text(text = value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), maxLines = 1)
             Text(text = label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -481,7 +486,7 @@ private fun GravitySection(stats: com.homelab.app.data.remote.dto.pihole.PiholeS
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = RoundedCornerShape(12.dp), color = ServiceType.PIHOLE.primaryColor.copy(alpha = 0.1f), modifier = Modifier.size(44.dp)) {
-                Icon(Icons.Default.Storage, contentDescription = null, tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(10.dp))
+                Icon(Icons.Default.Storage, contentDescription = stringResource(R.string.pihole_gravity_domains), tint = ServiceType.PIHOLE.primaryColor, modifier = Modifier.padding(10.dp))
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column {
@@ -491,7 +496,7 @@ private fun GravitySection(stats: com.homelab.app.data.remote.dto.pihole.PiholeS
             Spacer(modifier = Modifier.weight(1f))
             if (stats.gravity.last_update > 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Default.Schedule, contentDescription = stringResource(R.string.pihole_gravity_domains), modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.width(4.dp))
                     val date = Date(stats.gravity.last_update * 1000)
                     val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
@@ -543,7 +548,7 @@ private fun TopDomainsSection(topDomains: List<PiholeTopItem>) {
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(text = stringResource(R.string.pihole_top_queries), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = stringResource(R.string.pihole_top_domains), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Text(stringResource(R.string.pihole_total_suffix).format(formatNum(total)), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
             }
@@ -594,7 +599,7 @@ private fun TopClientsSection(topClients: List<PiholeTopClient>) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(shape = RoundedCornerShape(8.dp), color = StatusBlue.copy(alpha = 0.1f), modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = StatusBlue, modifier = Modifier.padding(6.dp))
+                            Icon(Icons.Default.Person, contentDescription = stringResource(R.string.pihole_top_clients), tint = StatusBlue, modifier = Modifier.padding(6.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {

@@ -6,6 +6,7 @@ struct Translations {
     // Common
     let loading: String
     let error: String
+    let refresh: String
     let cancel: String
     let save: String
     let confirm: String
@@ -18,6 +19,8 @@ struct Translations {
     let noData: String
     let retry: String
     let notAvailable: String
+    let reconnect: String
+    let offlineUnreachable: String
 
     // Tabs
     let tabHome: String
@@ -31,6 +34,7 @@ struct Translations {
     let launcherNotConfigured: String
     let launcherTapToConnect: String
     let launcherServices: String
+    let homeReorderServices: String
 
     // Tailscale
     let tailscaleConnect: String
@@ -39,6 +43,7 @@ struct Translations {
     // Status
     let statusUnreachable: String
     let statusVerifying: String
+    let statusOnline: String
     let actionReconnect: String
 
     // Greetings
@@ -118,6 +123,7 @@ struct Translations {
     let actionResume: String
     let actionKill: String
     let actionRemove: String
+    let actionClear: String
     let actionConfirm: String
     let actionConfirmMessage: String
     let actionRemoveConfirm: String
@@ -130,6 +136,7 @@ struct Translations {
     let detailEnv: String
     let detailCompose: String
     let detailContainer: String
+    let detailId: String
     let detailCreated: String
     let detailHostname: String
     let detailWorkDir: String
@@ -147,6 +154,8 @@ struct Translations {
     let detailCpu: String
     let detailMemory: String
     let detailNetworkIO: String
+    let detailRx: String
+    let detailTx: String
     let detailUsed: String
     let detailContainerLogs: String
     let detailNotFound: String
@@ -184,9 +193,11 @@ struct Translations {
     let piholeQueryActivity: String
     let piholeQueriesOverTime: String
     let piholeDomainManagement: String
+    let piholeListType: String
     let piholeAllowed: String
     let piholeBlocked: String
     let piholeAddDomain: String
+    let piholeDomainPlaceholder: String
     let piholeNoDomains: String
     let piholeAddDomainDesc: String
 
@@ -253,6 +264,7 @@ struct Translations {
     let giteaCommits: String
     let giteaBranches: String
     let giteaNoFiles: String
+    let giteaNoBranches: String
     let giteaNoCommits: String
     let giteaNoIssues: String
     let giteaOpenIssues: String
@@ -285,6 +297,7 @@ struct Translations {
     let timeToday: String
     let timeNow: String
     let timeHoursAgo: String
+    let timeDayAgo: String
     let timeDaysAgo: String
     let timeMonthsAgo: String
 
@@ -313,8 +326,23 @@ struct Translations {
     let settingsCopied: String
     let settingsThemeAuto: String
     let settingsContacts: String
+    let settingsContactTelegram: String
+    let settingsContactReddit: String
+    let settingsContactGithub: String
     let settingsHideService: String
     let settingsShowService: String
+    let settingsHiddenBadge: String
+    let settingsNoInstances: String
+    let settingsInstanceSingular: String
+    let settingsInstancePlural: String
+    let settingsAddInstance: String
+    let settingsSetDefault: String
+    let settingsDeleteInstanceTitle: String
+    let settingsDeleteInstanceMessage: String
+    let settingsFallbackPrefix: String
+    let settingsMoveUp: String
+    let settingsMoveDown: String
+    let actionEdit: String
 
     // Security
     let securityTitle: String
@@ -327,6 +355,8 @@ struct Translations {
     let securityWrongPin: String
     let securityEnableBiometric: String
     let securityBiometricDesc: String
+    let securityFaceId: String
+    let securityTouchId: String
     let securityChangePin: String
     let securityDisable: String
     let securityDisableConfirm: String
@@ -339,6 +369,19 @@ struct Translations {
     let securityCurrentPinDesc: String
     let securityNotConfigured: String
     let securitySkip: String
+
+    // Multi-instance
+    let badgeDefault: String
+    let dashboardInstances: String
+    let loginEditTitle: String
+    let loginEditSubtitle: String
+    let loginLabel: String
+    let loginFallbackOptional: String
+    let loginPasswordIfChanging: String
+    let loginErrorPasswordRequired: String
+    let loginShowPassword: String
+    let loginHidePassword: String
+    let tailscaleBadge: String
 
     // Bookmarks
     let bookmarkTitle: String
@@ -356,6 +399,10 @@ struct Translations {
     let categoryDeleteConfirm: String
     let categoryEmpty: String
     let categoryUncategorized: String
+    let categorySymbolPlaceholder: String
+    let categorySymbolExample: String
+    let bookmarkUseFavicon: String
+    let bookmarkSfSymbolPrompt: String
 
     // Tailscale v2
     let tailscaleOpen: String
@@ -373,12 +420,23 @@ struct Translations {
     let bookmarkEnterUrl: String
     let bookmarkTags: String
     let bookmarkSearchPrompt: String
+    let bookmarkToggleView: String
     let bookmarkEnterSelfhst: String
     let bookmarkPreviewSelfhst: String
+    let bookmarkImagePreview: String
+    let bookmarkSelfhstHint: String
+    let bookmarkReorder: String
+    let bookmarkReorderCategoryLabel: String
+    let bookmarkReorderBookmarkLabel: String
+    let bookmarkExpandCategory: String
+    let bookmarkCollapseCategory: String
+    let bookmarkMoveToCategory: String
+    let categoryActions: String
 
     // Onboarding v2
     let onboardingWelcome: String
     let onboardingWelcomeDesc: String
+    let onboardingWelcomeButton: String
     let onboardingAskPin: String
     let onboardingAskPinYes: String
     let onboardingAskPinNo: String

@@ -93,7 +93,7 @@ fun ContainerListScreen(
                 value = searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
                 placeholder = { Text(stringResource(R.string.portainer_search_hint)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.portainer_search_hint), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
@@ -156,7 +156,7 @@ fun ContainerListScreen(
             } else if (containers.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.FilterList, contentDescription = stringResource(R.string.portainer_no_containers), modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(stringResource(R.string.portainer_no_containers), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -191,7 +191,7 @@ fun ContainerRowCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
         label = "BouncyCard"
     )
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -331,8 +331,8 @@ fun ActionButton(action: ContainerAction, icon: androidx.compose.ui.graphics.vec
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
         label = "BouncyAction"
     )
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current

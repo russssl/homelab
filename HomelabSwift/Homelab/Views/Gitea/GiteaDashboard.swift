@@ -32,10 +32,13 @@ private let heatmapColorsLight: [Color] = [
 ]
 
 struct GiteaDashboard: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var selectedInstanceId: UUID
     @State private var user: GiteaUser?
     @State private var repos: [GiteaRepo] = []
     @State private var orgs: [GiteaOrg] = []
@@ -61,12 +64,20 @@ struct GiteaDashboard: View {
         (repos.count, repos.reduce(0) { $0 + $1.stars_count })
     }
 
+    init(instanceId: UUID) {
+        self.instanceId = instanceId
+        _selectedInstanceId = State(initialValue: instanceId)
+    }
+
     var body: some View {
         ServiceDashboardLayout(
             serviceType: .gitea,
+            instanceId: selectedInstanceId,
             state: state,
             onRefresh: fetchAll
         ) {
+            instancePicker
+
             if let user {
                 userCard(user)
             }
@@ -85,9 +96,54 @@ struct GiteaDashboard: View {
         }
         .navigationTitle(localizer.t.serviceGitea)
         .navigationDestination(for: GiteaRepoRoute.self) { route in
-            GiteaRepoDetail(owner: route.owner, repoName: route.repoName, initialPath: route.path, isFile: route.isFile, initialBranch: route.branch)
+            GiteaRepoDetail(instanceId: route.instanceId, owner: route.owner, repoName: route.repoName, initialPath: route.path, isFile: route.isFile, initialBranch: route.branch)
         }
-        .task { await fetchAll() }
+        .task(id: selectedInstanceId) { await fetchAll() }
+    }
+
+    private var instancePicker: some View {
+        let instances = servicesStore.instances(for: .gitea)
+        return Group {
+            if instances.count > 1 {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(localizer.t.dashboardInstances)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.textMuted)
+                        .textCase(.uppercase)
+
+                    ForEach(instances) { instance in
+                        Button {
+                            HapticManager.light()
+                            selectedInstanceId = instance.id
+                            servicesStore.setPreferredInstance(id: instance.id, for: .gitea)
+                            user = nil
+                            repos = []
+                            orgs = []
+                            heatmap = []
+                            totalBranches = 0
+                        } label: {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(instance.id == selectedInstanceId ? giteaColor : AppTheme.textMuted.opacity(0.4))
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(instance.displayLabel)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(instance.url)
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(14)
+                            .glassCard(tint: instance.id == selectedInstanceId ? giteaColor.opacity(0.1) : nil)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - User Card
@@ -99,6 +155,7 @@ struct GiteaDashboard: View {
                 .foregroundStyle(giteaColor)
                 .frame(width: 52, height: 52)
                 .background(giteaColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.full_name.isEmpty ? user.login : user.full_name)
@@ -190,6 +247,7 @@ struct GiteaDashboard: View {
                             Image(systemName: "building.2")
                                 .font(.caption)
                                 .foregroundStyle(giteaColor)
+                                .accessibilityHidden(true)
                             Text(org.username)
                                 .font(.subheadline.bold())
                         }
@@ -222,6 +280,7 @@ struct GiteaDashboard: View {
                     HStack(spacing: 6) {
                         Image(systemName: sortOrder == .recent ? "clock" : "textformat.abc")
                             .font(.caption2)
+                            .accessibilityHidden(true)
                         Text(sortOrder == .recent ? localizer.t.giteaSortRecent : localizer.t.giteaSortAlpha)
                             .font(.caption2.bold())
                     }
@@ -237,6 +296,7 @@ struct GiteaDashboard: View {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 40))
                         .foregroundStyle(AppTheme.textMuted)
+                        .accessibilityHidden(true)
                     Text(localizer.t.giteaNoRepos)
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
@@ -245,7 +305,7 @@ struct GiteaDashboard: View {
                 .padding(.top, 40)
             } else {
                 ForEach(sortedRepos) { repo in
-                    NavigationLink(value: GiteaRepoRoute(owner: repo.owner.login, repoName: repo.name)) {
+                    NavigationLink(value: GiteaRepoRoute(instanceId: selectedInstanceId, owner: repo.owner.login, repoName: repo.name)) {
                         RepoCard(repo: repo, t: localizer.t)
                             .contentShape(Rectangle())
                     }
@@ -307,54 +367,52 @@ struct GiteaDashboard: View {
     private func fetchAll() async {
         state = .loading
 
-        do {
-            async let u = { try? await servicesStore.giteaClient.getCurrentUser() }()
-            async let r = { try? await servicesStore.giteaClient.getUserRepos(page: 1, limit: 30) }()
-            async let o = { try? await servicesStore.giteaClient.getOrgs() }()
+        guard let client = await servicesStore.giteaClient(instanceId: selectedInstanceId) else {
+            state = .error(.notConfigured)
+            return
+        }
+        async let u = { try? await client.getCurrentUser() }()
+        async let r = { try? await client.getUserRepos(page: 1, limit: 30) }()
+        async let o = { try? await client.getOrgs() }()
 
-            let fetchedUser = await u
-            let fetchedRepos = await r
-            let fetchedOrgs = await o
+        let fetchedUser = await u
+        let fetchedRepos = await r
+        let fetchedOrgs = await o
 
-            if let fetchedUser { user = fetchedUser }
-            if let fetchedOrgs { orgs = fetchedOrgs }
-            if let fetchedRepos {
-                repos = fetchedRepos
-                Task {
-                    var counts = 0
-                    await withTaskGroup(of: Int.self) { group in
-                        for repo in fetchedRepos {
-                            group.addTask {
-                                do {
-                                    let branches = try await servicesStore.giteaClient.getRepoBranches(owner: repo.owner.login, repo: repo.name)
-                                    return branches.count
-                                } catch {
-                                    return 0
-                                }
+        if let fetchedUser { user = fetchedUser }
+        if let fetchedOrgs { orgs = fetchedOrgs }
+        if let fetchedRepos {
+            repos = fetchedRepos
+            Task {
+                var counts = 0
+                await withTaskGroup(of: Int.self) { group in
+                    for repo in fetchedRepos {
+                        group.addTask {
+                            do {
+                                let branches = try await client.getRepoBranches(owner: repo.owner.login, repo: repo.name)
+                                return branches.count
+                            } catch {
+                                return 0
                             }
                         }
-                        for await c in group { counts += c }
                     }
-                    totalBranches = counts
+                    for await c in group { counts += c }
                 }
+                totalBranches = counts
             }
+        }
 
-            // Fetch heatmap after we have user
-            if let login = (fetchedUser ?? user)?.login {
-                if let h = try? await servicesStore.giteaClient.getUserHeatmap(username: login) {
-                    heatmap = h
-                }
+        // Fetch heatmap after we have user
+        if let login = (fetchedUser ?? user)?.login {
+            if let h = try? await client.getUserHeatmap(username: login) {
+                heatmap = h
             }
+        }
 
-            if fetchedUser == nil && user == nil {
-                state = .error(.custom(localizer.t.error))
-            } else {
-                state = .loaded(())
-            }
-        } catch let apiError as APIError {
-            state = .error(apiError)
-        } catch {
-            state = .error(.custom(error.localizedDescription))
+        if fetchedUser == nil && user == nil {
+            state = .error(.custom(localizer.t.error))
+        } else {
+            state = .loaded(())
         }
     }
 }
@@ -362,6 +420,7 @@ struct GiteaDashboard: View {
 // MARK: - Route
 
 struct GiteaRepoRoute: Hashable {
+    let instanceId: UUID
     let owner: String
     let repoName: String
     var path: String = ""
@@ -382,6 +441,7 @@ private struct MiniStat: View {
             Image(systemName: icon)
                 .font(.subheadline)
                 .foregroundStyle(iconColor)
+                .accessibilityHidden(true)
             Text(value)
                 .font(.title3.bold())
             Text(label)
@@ -410,6 +470,7 @@ private struct RepoCard: View {
                     Image(systemName: repo.isPrivate ? "lock" : "lock.open")
                         .font(.caption)
                         .foregroundStyle(repo.isPrivate ? AppTheme.warning : AppTheme.textMuted)
+                        .accessibilityHidden(true)
                     Text(repo.name)
                         .font(.subheadline.bold())
                         .foregroundStyle(giteaColor)
@@ -424,6 +485,7 @@ private struct RepoCard: View {
                             Image(systemName: "tuningfork")
                                 .font(.system(size: 10))
                                 .foregroundStyle(AppTheme.textMuted)
+                                .accessibilityHidden(true)
                             Text(t.giteaFork)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(AppTheme.textMuted)
@@ -435,6 +497,7 @@ private struct RepoCard: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.textMuted)
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -463,6 +526,7 @@ private struct RepoCard: View {
                     Image(systemName: "star")
                         .font(.system(size: 12))
                         .foregroundStyle(AppTheme.warning)
+                        .accessibilityHidden(true)
                     Text("\(repo.stars_count)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textMuted)
@@ -471,6 +535,7 @@ private struct RepoCard: View {
                     Image(systemName: "tuningfork")
                         .font(.system(size: 12))
                         .foregroundStyle(AppTheme.textMuted)
+                        .accessibilityHidden(true)
                     Text("\(repo.forks_count)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textMuted)
@@ -501,7 +566,7 @@ private func formatRelativeDate(_ dateString: String, t: Translations) -> String
     let diff = Date().timeIntervalSince(d)
     let days = Int(diff / 86400)
     if days == 0 { return t.timeToday }
-    if days == 1 { return "1\(t.unitDays) ago" } // Should probably have "ago" localized too, but for now let's use timeDaysAgo pattern if possible or just units.
+    if days == 1 { return t.timeDayAgo }
     if days < 30 { return String(format: t.timeDaysAgo, days) }
     let months = days / 30
     return String(format: t.timeMonthsAgo, months)

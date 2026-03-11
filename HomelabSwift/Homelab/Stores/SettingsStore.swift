@@ -25,6 +25,12 @@ final class SettingsStore {
         }
     }
 
+    private(set) var serviceOrder: [ServiceType] {
+        didSet {
+            UserDefaults.standard.set(serviceOrder.map(\.rawValue), forKey: Keys.serviceOrder)
+        }
+    }
+
     var biometricEnabled: Bool {
         didSet {
             UserDefaults.standard.set(biometricEnabled, forKey: Keys.biometricEnabled)
@@ -45,6 +51,7 @@ final class SettingsStore {
         static let language = "homelab_language"
         static let theme = "homelab_theme"
         static let hiddenServices = "homelab_hidden_services"
+        static let serviceOrder = "homelab_service_order"
         static let biometricEnabled = "homelab_biometric_enabled"
         static let hasCompletedOnboarding = "homelab_has_completed_onboarding"
     }
@@ -60,6 +67,9 @@ final class SettingsStore {
 
         let savedHidden = UserDefaults.standard.stringArray(forKey: Keys.hiddenServices) ?? []
         self.hiddenServices = Set(savedHidden)
+
+        let savedOrder = UserDefaults.standard.stringArray(forKey: Keys.serviceOrder) ?? []
+        self.serviceOrder = Self.normalizedServiceOrder(savedOrder.compactMap(ServiceType.init(rawValue:)))
 
         self.biometricEnabled = UserDefaults.standard.bool(forKey: Keys.biometricEnabled)
         self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: Keys.hasCompletedOnboarding)
@@ -79,6 +89,21 @@ final class SettingsStore {
         }
     }
 
+    func canMoveService(_ type: ServiceType, offset: Int) -> Bool {
+        guard let index = serviceOrder.firstIndex(of: type) else { return false }
+        let destination = index + offset
+        return serviceOrder.indices.contains(destination)
+    }
+
+    func moveService(_ type: ServiceType, offset: Int) {
+        guard let index = serviceOrder.firstIndex(of: type) else { return }
+        let destination = index + offset
+        guard serviceOrder.indices.contains(destination) else { return }
+        var updated = serviceOrder
+        updated.swapAt(index, destination)
+        serviceOrder = updated
+    }
+
     // MARK: - PIN Security
 
     var isPinSet: Bool {
@@ -96,6 +121,13 @@ final class SettingsStore {
     func clearSecurity() {
         KeychainService.deletePin()
         biometricEnabled = false
+    }
+
+    private static func normalizedServiceOrder(_ order: [ServiceType]) -> [ServiceType] {
+        var seen = Set<ServiceType>()
+        let unique = order.filter { seen.insert($0).inserted }
+        let missing = ServiceType.allCases.filter { !unique.contains($0) }
+        return unique + missing
     }
 }
 

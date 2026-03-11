@@ -1,11 +1,14 @@
 package com.homelab.app.ui.portainer
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.homelab.app.R
 import com.homelab.app.data.remote.dto.portainer.ContainerAction
 import com.homelab.app.data.remote.dto.portainer.PortainerContainer
 import com.homelab.app.data.repository.PortainerRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -16,9 +19,11 @@ enum class ContainerFilter { ALL, RUNNING, STOPPED }
 @HiltViewModel
 class ContainerListViewModel @Inject constructor(
     private val repository: PortainerRepository,
+    @param:ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    val instanceId: String = checkNotNull(savedStateHandle["instanceId"])
     val endpointId: Int = checkNotNull(savedStateHandle["endpointId"])
 
     private val _containers = MutableStateFlow<List<PortainerContainer>>(emptyList())
@@ -71,10 +76,10 @@ class ContainerListViewModel @Inject constructor(
             if (_containers.value.isEmpty()) _isLoading.value = true
             _error.value = null
             try {
-                _containers.value = repository.getContainers(endpointId)
+                _containers.value = repository.getContainers(instanceId, endpointId)
             } catch (e: Exception) {
                 if (_containers.value.isEmpty()) {
-                    _error.value = e.localizedMessage ?: "Errore recupero containers"
+                    _error.value = e.localizedMessage ?: context.getString(R.string.portainer_error_loading_containers)
                 }
             } finally {
                 _isLoading.value = false
@@ -99,16 +104,16 @@ class ContainerListViewModel @Inject constructor(
             _actionInProgress.value = containerId
             try {
                 when (action) {
-                    ContainerAction.start -> repository.startContainer(endpointId, containerId)
-                    ContainerAction.stop -> repository.stopContainer(endpointId, containerId)
-                    ContainerAction.restart -> repository.restartContainer(endpointId, containerId)
-                    ContainerAction.kill -> repository.killContainer(endpointId, containerId)
-                    ContainerAction.pause -> repository.pauseContainer(endpointId, containerId)
-                    ContainerAction.unpause -> repository.unpauseContainer(endpointId, containerId)
+                    ContainerAction.start -> repository.startContainer(instanceId, endpointId, containerId)
+                    ContainerAction.stop -> repository.stopContainer(instanceId, endpointId, containerId)
+                    ContainerAction.restart -> repository.restartContainer(instanceId, endpointId, containerId)
+                    ContainerAction.kill -> repository.killContainer(instanceId, endpointId, containerId)
+                    ContainerAction.pause -> repository.pauseContainer(instanceId, endpointId, containerId)
+                    ContainerAction.unpause -> repository.unpauseContainer(instanceId, endpointId, containerId)
                 }
                 fetchContainers()
             } catch (e: Exception) {
-                _error.value = e.localizedMessage ?: "Impossibile eseguire l'azione"
+                _error.value = e.localizedMessage ?: context.getString(R.string.portainer_error_action_failed)
             } finally {
                 _actionInProgress.value = null
             }

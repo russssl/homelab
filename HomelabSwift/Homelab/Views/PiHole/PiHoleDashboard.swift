@@ -4,9 +4,12 @@ import Charts
 // Maps to app/pihole/index.tsx
 
 struct PiHoleDashboard: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
 
+    @State private var selectedInstanceId: UUID
     @State private var stats: PiholeStats?
     @State private var blocking: PiholeBlockingStatus?
     @State private var topBlocked: [PiholeTopItem] = []
@@ -24,12 +27,20 @@ struct PiHoleDashboard: View {
     private let piholeColor = ServiceType.pihole.colors.primary
     private var isBlocking: Bool { blocking?.isEnabled ?? false }
 
+    init(instanceId: UUID) {
+        self.instanceId = instanceId
+        _selectedInstanceId = State(initialValue: instanceId)
+    }
+
     var body: some View {
         ServiceDashboardLayout(
             serviceType: .pihole,
+            instanceId: selectedInstanceId,
             state: state,
             onRefresh: fetchAll
         ) {
+            instancePicker
+
             // Blocking toggle card
             blockingCard
 
@@ -49,7 +60,7 @@ struct PiHoleDashboard: View {
                 gravitySection(stats)
                 
                 // Domain Management Link
-                NavigationLink(destination: PiholeDomainListView()) {
+                NavigationLink(destination: PiholeDomainListView(instanceId: selectedInstanceId)) {
                     HStack {
                         Image(systemName: "list.bullet.rectangle.portrait.fill")
                             .font(.body)
@@ -65,13 +76,14 @@ struct PiHoleDashboard: View {
                         Image(systemName: "chevron.right")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color(.tertiaryLabel))
+                            .accessibilityHidden(true)
                     }
                     .padding(16)
                     .glassCard()
                 }
                 .buttonStyle(.plain)
 
-                NavigationLink(destination: PiholeQueryLogView()) {
+                NavigationLink(destination: PiholeQueryLogView(instanceId: selectedInstanceId)) {
                     HStack {
                         Image(systemName: "text.append")
                             .font(.body)
@@ -87,6 +99,7 @@ struct PiHoleDashboard: View {
                         Image(systemName: "chevron.right")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color(.tertiaryLabel))
+                            .accessibilityHidden(true)
                     }
                     .padding(16)
                     .glassCard()
@@ -113,8 +126,8 @@ struct PiHoleDashboard: View {
                 topClientsSection
             }
         }
-        .navigationTitle("Pi-hole")
-        .task { await fetchAll() }
+        .navigationTitle(localizer.t.servicePihole)
+        .task(id: selectedInstanceId) { await fetchAll() }
         .alert(localizer.t.error, isPresented: $showToggleError) {
             Button(localizer.t.confirm, role: .cancel) { }
         } message: {
@@ -142,6 +155,53 @@ struct PiHoleDashboard: View {
             }
         } message: {
             Text(localizer.t.piholeCustomDisableDesc)
+        }
+    }
+
+    private var instancePicker: some View {
+        let instances = servicesStore.instances(for: .pihole)
+        return Group {
+            if instances.count > 1 {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(localizer.t.dashboardInstances)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.textMuted)
+                        .textCase(.uppercase)
+
+                    ForEach(instances) { instance in
+                        Button {
+                            HapticManager.light()
+                            selectedInstanceId = instance.id
+                            servicesStore.setPreferredInstance(id: instance.id, for: .pihole)
+                            stats = nil
+                            blocking = nil
+                            topBlocked = []
+                            topDomains = []
+                            topClients = []
+                            history = []
+                        } label: {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(instance.id == selectedInstanceId ? piholeColor : AppTheme.textMuted.opacity(0.4))
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(instance.displayLabel)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(instance.url)
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(14)
+                            .glassCard(tint: instance.id == selectedInstanceId ? piholeColor.opacity(0.1) : nil)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 
@@ -366,9 +426,10 @@ struct PiHoleDashboard: View {
 
             if stats.gravity.last_update > 0 {
                 HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.textMuted)
+                Image(systemName: "clock")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textMuted)
+                    .accessibilityHidden(true)
                     Text(Formatters.formatUnixDate(stats.gravity.last_update))
                         .font(.caption2)
                         .foregroundStyle(AppTheme.textMuted)
@@ -512,14 +573,17 @@ struct PiHoleDashboard: View {
         isToggling = true
         Task {
             do {
+                guard let client = await servicesStore.piholeClient(instanceId: selectedInstanceId) else {
+                    throw APIError.notConfigured
+                }
                 if let timer = timer {
-                    try await servicesStore.piholeClient.setBlocking(enabled: false, timer: timer)
+                    try await client.setBlocking(enabled: false, timer: timer)
                 } else {
-                    try await servicesStore.piholeClient.setBlocking(enabled: !isBlocking)
+                    try await client.setBlocking(enabled: !isBlocking)
                 }
                 HapticManager.success()
-                blocking = try? await servicesStore.piholeClient.getBlockingStatus()
-                stats = try? await servicesStore.piholeClient.getStats()
+                blocking = try? await client.getBlockingStatus()
+                stats = try? await client.getStats()
             } catch {
                 HapticManager.error()
                 toggleError = error.localizedDescription
@@ -535,8 +599,12 @@ struct PiHoleDashboard: View {
         state = .loading
 
         do {
-            async let s = servicesStore.piholeClient.getStats()
-            async let b = servicesStore.piholeClient.getBlockingStatus()
+            guard let client = await servicesStore.piholeClient(instanceId: selectedInstanceId) else {
+                state = .error(.notConfigured)
+                return
+            }
+            async let s = client.getStats()
+            async let b = client.getBlockingStatus()
             stats = try await s
             blocking = try await b
             state = .loaded(())
@@ -549,10 +617,11 @@ struct PiHoleDashboard: View {
         }
 
         // Non-critical fetches in parallel, assign results on main actor
-        async let tb = { (try? await servicesStore.piholeClient.getTopBlocked(count: 8)) ?? [] }()
-        async let td = { (try? await servicesStore.piholeClient.getTopDomains(count: 10)) ?? [] }()
-        async let tc = { (try? await servicesStore.piholeClient.getTopClients(count: 10)) ?? [] }()
-        async let qh = { try? await servicesStore.piholeClient.getQueryHistory() }()
+        guard let client = await servicesStore.piholeClient(instanceId: selectedInstanceId) else { return }
+        async let tb = { (try? await client.getTopBlocked(count: 8)) ?? [] }()
+        async let td = { (try? await client.getTopDomains(count: 10)) ?? [] }()
+        async let tc = { (try? await client.getTopClients(count: 10)) ?? [] }()
+        async let qh = { try? await client.getQueryHistory() }()
 
         topBlocked = await tb
         topDomains = await td
@@ -572,8 +641,11 @@ private enum PiholeQueryStatusFilter: CaseIterable, Identifiable {
 private let piholeAllClientFilter = "__all__"
 
 struct PiholeQueryLogView: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var entries: [PiholeQueryLogEntry] = []
     @State private var searchText = ""
@@ -581,6 +653,7 @@ struct PiholeQueryLogView: View {
     @State private var clientFilter = piholeAllClientFilter
     @State private var pollingTask: Task<Void, Never>?
     @State private var state: LoadableState<Void> = .idle
+    @State private var isVisible = false
 
     private var availableClients: [String] {
         let clients = Set(entries.map(\.client).filter { !$0.isEmpty && $0 != "unknown" })
@@ -698,8 +771,24 @@ struct PiholeQueryLogView: View {
         .navigationTitle(localizer.t.piholeQueryLog)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: localizer.t.piholeFilterSearch)
-        .task { startPolling() }
-        .onDisappear { stopPolling() }
+        .onAppear {
+            isVisible = true
+            startPolling()
+        }
+        .onDisappear {
+            isVisible = false
+            stopPolling()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                if isVisible { startPolling() }
+            case .background:
+                stopPolling()
+            default:
+                break
+            }
+        }
     }
 
     private func startPolling() {
@@ -707,7 +796,7 @@ struct PiholeQueryLogView: View {
         pollingTask = Task {
             await loadRecent(showLoading: true)
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(10))
                 guard !Task.isCancelled else { break }
                 await loadRecent(showLoading: false)
             }
@@ -732,7 +821,10 @@ struct PiholeQueryLogView: View {
         }()
 
         do {
-            let fetched = try await servicesStore.piholeClient.getQueries(from: from, until: until)
+            guard let client = await servicesStore.piholeClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            let fetched = try await client.getQueries(from: from, until: until)
             var merged: [String: PiholeQueryLogEntry] = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
             for item in fetched {
                 merged[item.id] = item

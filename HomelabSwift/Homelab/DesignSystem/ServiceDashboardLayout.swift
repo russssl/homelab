@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ServiceDashboardLayout<T, Content: View>: View {
     let serviceType: ServiceType
+    let instanceId: UUID
     let state: LoadableState<T>
     let onRefresh: () async -> Void
     @ViewBuilder let content: () -> Content
@@ -13,7 +14,7 @@ struct ServiceDashboardLayout<T, Content: View>: View {
     @State private var refreshID = UUID()
 
     var isUnreachable: Bool {
-        servicesStore.isReachable(serviceType) == false
+        servicesStore.reachability(for: instanceId) == false
     }
 
     private var stateChangeToken: String {
@@ -54,7 +55,7 @@ struct ServiceDashboardLayout<T, Content: View>: View {
 
             if isUnreachable && !state.isLoading {
                 OfflineBanner(serviceName: serviceType.displayName) {
-                    Task { await servicesStore.checkReachability(for: serviceType) }
+                    Task { await servicesStore.checkReachability(for: instanceId) }
                 }
             }
         }

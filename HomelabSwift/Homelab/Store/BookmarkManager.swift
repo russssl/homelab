@@ -141,7 +141,7 @@ final class BookmarkManager {
         bookmarks[index].categoryId = targetCategoryId
         bookmarks[index].sortOrder = targetCount
 
-        var oldCategoryBookmarks = bookmarks
+        let oldCategoryBookmarks = bookmarks
             .filter { $0.categoryId == oldCategoryId }
             .sorted(by: { $0.sortOrder < $1.sortOrder })
 

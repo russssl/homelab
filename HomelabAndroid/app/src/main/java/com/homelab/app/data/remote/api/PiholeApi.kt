@@ -30,18 +30,21 @@ interface PiholeApi {
     @GET("api/stats/summary")
     suspend fun getStats(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     ): PiholeStats
 
     @GET("api/dns/blocking")
     suspend fun getBlockingStatus(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     ): PiholeBlockingStatus
 
     @POST("api/dns/blocking")
     suspend fun setBlocking(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Body request: PiholeBlockingRequest
     )
@@ -50,12 +53,14 @@ interface PiholeApi {
     @GET("api/domains")
     suspend fun getDomainsRaw(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     ): JsonElement
 
     @GET("admin/api.php")
     suspend fun getDomainsLegacy(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("list") list: String = "all",
         @Query("auth") auth: String? = null
     ): JsonElement
@@ -64,6 +69,7 @@ interface PiholeApi {
     suspend fun addDomain(
         @Path("list") list: String,
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Body request: PiholeAddDomainRequest
     )
@@ -71,6 +77,7 @@ interface PiholeApi {
     @GET("admin/api.php")
     suspend fun addDomainLegacy(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("list") list: String,
         @Query("add") domain: String,
         @Query("auth") auth: String? = null
@@ -81,12 +88,14 @@ interface PiholeApi {
         @Path("list") list: String,
         @Path("domain") domain: String,
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     )
 
     @GET("admin/api.php")
     suspend fun removeDomainLegacy(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("list") list: String,
         @Query("sub") domain: String,
         @Query("auth") auth: String? = null
@@ -98,6 +107,7 @@ interface PiholeApi {
     @GET("api/stats/top_domains")
     suspend fun getTopDomains(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -105,6 +115,7 @@ interface PiholeApi {
     @GET("api/stats/top_queries")
     suspend fun getTopQueries(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -112,6 +123,7 @@ interface PiholeApi {
     @GET("api/stats/top_blocked")
     suspend fun getTopBlocked(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -119,6 +131,7 @@ interface PiholeApi {
     @GET("api/stats/top_ads")
     suspend fun getTopAds(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -126,6 +139,7 @@ interface PiholeApi {
     @GET("api/stats/top_clients")
     suspend fun getTopClients(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -133,6 +147,7 @@ interface PiholeApi {
     @GET("api/stats/top_sources")
     suspend fun getTopSources(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("count") count: Int = 10
     ): JsonElement
@@ -140,12 +155,14 @@ interface PiholeApi {
     @GET("api/history")
     suspend fun getQueryHistory(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     ): PiholeQueryHistory
 
     @GET("api/queries")
     suspend fun getQueries(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null,
         @Query("from") from: Long,
         @Query("until") until: Long
@@ -154,6 +171,7 @@ interface PiholeApi {
     @GET("admin/api.php")
     suspend fun getQueriesLegacy(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("getAllQueriesRaw") getAllQueriesRaw: Int = 1,
         @Query("from") from: Long,
         @Query("until") until: Long,
@@ -163,6 +181,7 @@ interface PiholeApi {
     @GET("api/stats/upstreams")
     suspend fun getUpstreams(
         @Header("X-Homelab-Service") service: String = "Pihole",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("auth") auth: String? = null
     ): PiholeUpstream
 }

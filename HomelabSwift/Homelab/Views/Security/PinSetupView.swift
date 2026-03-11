@@ -92,12 +92,21 @@ struct PinSetupView: View {
                     .frame(width: 200, height: 200)
                     .blur(radius: 50)
 
-                Image("AppIconImage")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 140, height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 32))
-                    .shadow(color: AppTheme.primary.opacity(0.4), radius: 25, x: 0, y: 15)
+                if let icon = UIImage(named: "AppIconImage") {
+                    Image(uiImage: icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 140, height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .shadow(color: AppTheme.primary.opacity(0.4), radius: 25, x: 0, y: 15)
+                } else {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 72))
+                        .foregroundStyle(AppTheme.accent)
+                        .frame(width: 140, height: 140)
+                        .background(AppTheme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 32))
+                        .shadow(color: AppTheme.primary.opacity(0.25), radius: 20, x: 0, y: 12)
+                }
             }
 
             VStack(spacing: 32) {
@@ -119,7 +128,7 @@ struct PinSetupView: View {
                         step = .ask
                     }
                 } label: {
-                    Text(localizer.t.actionResume.replacingOccurrences(of: "Resume", with: "Continue"))
+                    Text(localizer.t.onboardingWelcomeButton)
                         .font(.headline.bold())
                         .foregroundStyle(.white)
                         .frame(width: 240)

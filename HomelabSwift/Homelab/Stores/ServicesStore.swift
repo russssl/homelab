@@ -2,47 +2,89 @@ import Foundation
 import Observation
 import Darwin
 
+private final class ServiceClientManager {
+    private var portainerClients: [UUID: PortainerAPIClient] = [:]
+    private var piholeClients: [UUID: PiHoleAPIClient] = [:]
+    private var beszelClients: [UUID: BeszelAPIClient] = [:]
+    private var giteaClients: [UUID: GiteaAPIClient] = [:]
+
+    func portainerClient(id: UUID) -> PortainerAPIClient {
+        if let client = portainerClients[id] {
+            return client
+        }
+        let client = PortainerAPIClient(instanceId: id)
+        portainerClients[id] = client
+        return client
+    }
+
+    func piholeClient(id: UUID) -> PiHoleAPIClient {
+        if let client = piholeClients[id] {
+            return client
+        }
+        let client = PiHoleAPIClient(instanceId: id)
+        piholeClients[id] = client
+        return client
+    }
+
+    func beszelClient(id: UUID) -> BeszelAPIClient {
+        if let client = beszelClients[id] {
+            return client
+        }
+        let client = BeszelAPIClient(instanceId: id)
+        beszelClients[id] = client
+        return client
+    }
+
+    func giteaClient(id: UUID) -> GiteaAPIClient {
+        if let client = giteaClients[id] {
+            return client
+        }
+        let client = GiteaAPIClient(instanceId: id)
+        giteaClients[id] = client
+        return client
+    }
+
+    func removeClient(id: UUID, type: ServiceType) {
+        switch type {
+        case .portainer:
+            portainerClients.removeValue(forKey: id)
+        case .pihole:
+            piholeClients.removeValue(forKey: id)
+        case .beszel:
+            beszelClients.removeValue(forKey: id)
+        case .gitea:
+            giteaClients.removeValue(forKey: id)
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class ServicesStore {
 
-    // MARK: - State (mirrors useServicesStore.ts)
-
-    private(set) var connections: [ServiceType: ServiceConnection] = [:]
+    private(set) var instancesById: [UUID: ServiceInstance] = [:]
+    private(set) var preferredInstanceIdByType: [ServiceType: UUID] = [:]
     private(set) var isReady: Bool = false
-    private(set) var reachability: [ServiceType: Bool?] = [:]  // nil = checking, true = up, false = down
-    private(set) var pinging: [ServiceType: Bool] = [:]
+    private(set) var reachabilityByInstanceId: [UUID: Bool?] = [:]
+    private(set) var pingingByInstanceId: [UUID: Bool] = [:]
     private(set) var isTailscaleConnected: Bool = false
 
-    /// Tracks last reachability check time to debounce rapid checks
     private var lastReachabilityCheck: Date?
-
-    /// Periodic health check task (runs every 30 seconds while app is active)
     private var healthCheckTask: Task<Void, Never>?
+    private let clientManager = ServiceClientManager()
 
-    // MARK: - API Clients (one per service)
-
-    let portainerClient = PortainerAPIClient()
-    let piholeClient = PiHoleAPIClient()
-    let beszelClient = BeszelAPIClient()
-    let giteaClient = GiteaAPIClient()
-
-    // MARK: - Computed
-
-    var connectedCount: Int { connections.count }
-
-    func isConnected(_ type: ServiceType) -> Bool { connections[type] != nil }
-
-    func isReachable(_ type: ServiceType) -> Bool? {
-        guard connections[type] != nil else { return nil }
-        return reachability[type] ?? nil
+    var connectedCount: Int { instancesById.count }
+    var allInstances: [ServiceInstance] {
+        instancesById.values.sorted { lhs, rhs in
+            if lhs.type != rhs.type {
+                return lhs.type.rawValue < rhs.type.rawValue
+            }
+            if lhs.displayLabel != rhs.displayLabel {
+                return lhs.displayLabel.localizedCaseInsensitiveCompare(rhs.displayLabel) == .orderedAscending
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
     }
-
-    func isPinging(_ type: ServiceType) -> Bool { pinging[type] ?? false }
-
-    func connection(for type: ServiceType) -> ServiceConnection? { connections[type] }
-
-    // MARK: - Init: listen for 401 notifications
 
     init() {
         NotificationCenter.default.addObserver(
@@ -50,111 +92,195 @@ final class ServicesStore {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let serviceType = notification.userInfo?["serviceType"] as? ServiceType {
-                Task { @MainActor in
-                    await self?.handleUnauthorized(serviceType)
-                }
+            guard let instanceId = notification.userInfo?["instanceId"] as? UUID else { return }
+            Task { @MainActor in
+                await self?.handleUnauthorized(instanceId: instanceId)
             }
         }
     }
 
-    // MARK: - Initialize (mirrors init() in useServicesStore.ts)
-
     func initialize() async {
-        let saved = KeychainService.loadConnections()
-        connections = saved
+        let state = KeychainService.loadServiceState()
+        instancesById = Dictionary(uniqueKeysWithValues: state.instances.map { ($0.id, $0) })
+        preferredInstanceIdByType = state.preferredInstanceIdByType
 
-        // Configure API clients
-        for (type, conn) in saved {
-            await configureClient(for: type, with: conn)
-        }
+        repairAllPreferredInstances()
 
-        // Set initial reachability to nil (checking)
-        for type in saved.keys {
-            reachability[type] = nil
+        for instance in allInstances {
+            await configureClient(for: instance, refreshPiHoleAuth: true)
+            reachabilityByInstanceId[instance.id] = nil
         }
 
         isReady = true
 
-        // Fire-and-forget health checks
         Task {
             await checkAllReachability()
             await checkTailscale()
         }
 
-        // Start periodic health checks (every 30 seconds)
         startPeriodicHealthChecks()
     }
 
-    // MARK: - Connect (mirrors connectService)
-
-    func connectService(_ connection: ServiceConnection) async {
-        connections[connection.type] = connection
-        await configureClient(for: connection.type, with: connection)
-        KeychainService.saveConnections(connections)
-        reachability[connection.type] = nil
-        Task { await checkReachability(for: connection.type) }
+    func instances(for type: ServiceType) -> [ServiceInstance] {
+        allInstances.filter { $0.type == type }
     }
 
-    // MARK: - Disconnect (mirrors disconnectService)
-
-    func disconnectService(_ type: ServiceType) {
-        connections.removeValue(forKey: type)
-        reachability.removeValue(forKey: type)
-        pinging.removeValue(forKey: type)
-        KeychainService.saveConnections(connections)
+    func instance(id: UUID) -> ServiceInstance? {
+        instancesById[id]
     }
 
-    // MARK: - Update fallback URL
-
-    func updateFallbackURL(for type: ServiceType, fallbackUrl: String) async {
-        guard var conn = connections[type] else { return }
-        conn = ServiceConnection(
-            type: type,
-            url: conn.url,
-            token: conn.token,
-            username: conn.username,
-            apiKey: conn.apiKey,
-            piholePassword: conn.piholePassword,
-            piholeAuthMode: conn.piholeAuthMode,
-            fallbackUrl: fallbackUrl.isEmpty ? nil : fallbackUrl
-        )
-        connections[type] = conn
-        await configureClient(for: type, with: conn)
-        KeychainService.saveConnections(connections)
+    func hasInstances(for type: ServiceType) -> Bool {
+        !instances(for: type).isEmpty
     }
 
-    // MARK: - Reachability
+    func isConnected(_ type: ServiceType) -> Bool {
+        hasInstances(for: type)
+    }
 
-    func checkReachability(for type: ServiceType) async {
-        pinging[type] = true
-        reachability[type] = nil
-        defer { pinging[type] = false }
-
-        let ok: Bool
-        switch type {
-        case .portainer: ok = await portainerClient.ping()
-        case .pihole:    ok = await piholeClient.ping()
-        case .beszel:    ok = await beszelClient.ping()
-        case .gitea:     ok = await giteaClient.ping()
+    func preferredInstance(for type: ServiceType) -> ServiceInstance? {
+        if let preferredId = preferredInstanceIdByType[type],
+           let preferred = instancesById[preferredId],
+           preferred.type == type {
+            return preferred
         }
 
-        reachability[type] = ok
+        let fallback = instances(for: type).first
+        if preferredInstanceIdByType[type] != fallback?.id {
+            preferredInstanceIdByType[type] = fallback?.id
+            persistState()
+        }
+        return fallback
+    }
+
+    func preferredReachability(for type: ServiceType) -> Bool? {
+        guard let instance = preferredInstance(for: type) else { return nil }
+        return reachability(for: instance.id)
+    }
+
+    func isReachable(_ type: ServiceType) -> Bool? {
+        preferredReachability(for: type)
+    }
+
+    func preferredPinging(for type: ServiceType) -> Bool {
+        guard let instance = preferredInstance(for: type) else { return false }
+        return isPinging(instanceId: instance.id)
+    }
+
+    func isPinging(_ type: ServiceType) -> Bool {
+        preferredPinging(for: type)
+    }
+
+    func connection(for type: ServiceType) -> ServiceInstance? {
+        preferredInstance(for: type)
+    }
+
+    func reachability(for instanceId: UUID) -> Bool? {
+        guard instancesById[instanceId] != nil else { return nil }
+        return reachabilityByInstanceId[instanceId] ?? nil
+    }
+
+    func isPinging(instanceId: UUID) -> Bool {
+        pingingByInstanceId[instanceId] ?? false
+    }
+
+    func saveInstance(_ instance: ServiceInstance, refreshPiHoleAuth: Bool = false) async {
+        let previous = instancesById[instance.id]
+        instancesById[instance.id] = instance
+
+        if previous?.type != instance.type {
+            repairPreferredInstance(for: previous?.type)
+        }
+        if preferredInstanceIdByType[instance.type] == nil || preferredInstanceIdByType[instance.type] == instance.id {
+            preferredInstanceIdByType[instance.type] = instance.id
+        }
+
+        persistState()
+        await configureClient(for: instance, refreshPiHoleAuth: refreshPiHoleAuth)
+
+        reachabilityByInstanceId[instance.id] = nil
+        Task { await checkReachability(for: instance.id) }
+    }
+
+    func deleteInstance(id: UUID) {
+        guard let removed = instancesById.removeValue(forKey: id) else { return }
+        reachabilityByInstanceId.removeValue(forKey: id)
+        pingingByInstanceId.removeValue(forKey: id)
+        clientManager.removeClient(id: id, type: removed.type)
+        repairPreferredInstance(for: removed.type)
+        persistState()
+    }
+
+    func setPreferredInstance(id: UUID, for type: ServiceType) {
+        guard let instance = instancesById[id], instance.type == type else {
+            repairPreferredInstance(for: type)
+            return
+        }
+        preferredInstanceIdByType[type] = id
+        persistState()
+    }
+
+    func updateFallbackURL(instanceId: UUID, fallbackUrl: String) async {
+        guard let current = instancesById[instanceId] else { return }
+        let updated = current.updating(fallbackUrl: fallbackUrl)
+        instancesById[instanceId] = updated
+        persistState()
+        await configureClient(for: updated, refreshPiHoleAuth: false)
+    }
+
+    func portainerClient(instanceId: UUID) async -> PortainerAPIClient? {
+        guard let instance = instancesById[instanceId], instance.type == .portainer else { return nil }
+        return clientManager.portainerClient(id: instance.id)
+    }
+
+    func piholeClient(instanceId: UUID) async -> PiHoleAPIClient? {
+        guard let instance = instancesById[instanceId], instance.type == .pihole else { return nil }
+        return clientManager.piholeClient(id: instance.id)
+    }
+
+    func beszelClient(instanceId: UUID) async -> BeszelAPIClient? {
+        guard let instance = instancesById[instanceId], instance.type == .beszel else { return nil }
+        return clientManager.beszelClient(id: instance.id)
+    }
+
+    func giteaClient(instanceId: UUID) async -> GiteaAPIClient? {
+        guard let instance = instancesById[instanceId], instance.type == .gitea else { return nil }
+        return clientManager.giteaClient(id: instance.id)
+    }
+
+    func checkReachability(for instanceId: UUID) async {
+        guard let instance = instancesById[instanceId], pingingByInstanceId[instanceId] != true else { return }
+
+        pingingByInstanceId[instanceId] = true
+        reachabilityByInstanceId[instanceId] = nil
+        defer { pingingByInstanceId[instanceId] = false }
+
+        let ok: Bool
+        switch instance.type {
+        case .portainer:
+            ok = await clientManager.portainerClient(id: instanceId).ping()
+        case .pihole:
+            ok = await clientManager.piholeClient(id: instanceId).ping()
+        case .beszel:
+            ok = await clientManager.beszelClient(id: instanceId).ping()
+        case .gitea:
+            ok = await clientManager.giteaClient(id: instanceId).ping()
+        }
+
+        reachabilityByInstanceId[instanceId] = ok
     }
 
     func checkAllReachability() async {
-        // Debounce: don't check if we already checked within last 5 seconds
         if let last = lastReachabilityCheck, Date().timeIntervalSince(last) < 5 {
             return
         }
         lastReachabilityCheck = Date()
 
-        let types = Array(connections.keys)
-        guard !types.isEmpty else { return }
+        let ids = Array(instancesById.keys)
+        guard !ids.isEmpty else { return }
 
         await withTaskGroup(of: Void.self) { group in
-            for type in types {
-                group.addTask { await self.checkReachability(for: type) }
+            for id in ids {
+                group.addTask { await self.checkReachability(for: id) }
             }
         }
         await checkTailscale()
@@ -168,28 +294,45 @@ final class ServicesStore {
         }
         defer { freeifaddrs(first) }
 
+        func ipv4Value(_ ip: String) -> UInt32? {
+            var addr = in_addr()
+            guard inet_pton(AF_INET, ip, &addr) == 1 else { return nil }
+            return UInt32(bigEndian: addr.s_addr)
+        }
+
+        let tailscaleStart = ipv4Value("100.64.0.0") ?? 0
+        let tailscaleEnd = ipv4Value("100.127.255.255") ?? 0
+
         var cursor: UnsafeMutablePointer<ifaddrs>? = first
         var found = false
         while let addr = cursor {
-            if let sa = addr.pointee.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) {
+            let name = String(cString: addr.pointee.ifa_name)
+            let isTailscaleInterface = name.hasPrefix("utun") || name.localizedCaseInsensitiveContains("tailscale")
+            if isTailscaleInterface, let sa = addr.pointee.ifa_addr {
                 var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                 getnameinfo(sa, socklen_t(sa.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST)
-                let ip = String(cString: hostname)
-                if ip.hasPrefix("100.") {
-                    found = true
+                let slice = hostname.prefix { $0 != 0 }
+                let bytes = slice.map { UInt8(bitPattern: $0) }
+                let ip = String(decoding: bytes, as: UTF8.self)
+                switch sa.pointee.sa_family {
+                case UInt8(AF_INET):
+                    if let value = ipv4Value(ip), value >= tailscaleStart, value <= tailscaleEnd {
+                        found = true
+                    }
+                case UInt8(AF_INET6):
+                    if ip.lowercased().hasPrefix("fd7a:115c:a1e0") {
+                        found = true
+                    }
+                default:
                     break
                 }
+                if found { break }
             }
             cursor = addr.pointee.ifa_next
         }
         isTailscaleConnected = found
     }
 
-    // MARK: - Periodic Health Checks
-
-    /// Start periodic health checks that run every 30 seconds.
-    /// Lightweight — only sends ping requests (3-second timeout each).
-    /// Automatically detects when services go offline (e.g., leaving home network).
     func startPeriodicHealthChecks() {
         healthCheckTask?.cancel()
         healthCheckTask = Task { [weak self] in
@@ -201,66 +344,104 @@ final class ServicesStore {
         }
     }
 
-    /// Stop periodic health checks (e.g., when app goes to background).
     func stopPeriodicHealthChecks() {
         healthCheckTask?.cancel()
         healthCheckTask = nil
     }
 
-    // MARK: - Private: configure clients
+    private func persistState() {
+        KeychainService.saveServiceState(
+            ServiceStateV2(
+                instances: allInstances,
+                preferredInstanceIdByType: preferredInstanceIdByType
+            )
+        )
+    }
 
-    private func handleUnauthorized(_ type: ServiceType) async {
-        if type == .pihole,
-           let conn = connections[type],
-           let password = conn.piHoleStoredSecret,
+    private func repairAllPreferredInstances() {
+        for type in ServiceType.allCases {
+            repairPreferredInstance(for: type)
+        }
+    }
+
+    private func repairPreferredInstance(for type: ServiceType?) {
+        guard let type else { return }
+        let validPreferred = preferredInstanceIdByType[type].flatMap { id in
+            instancesById[id].flatMap { $0.type == type ? $0.id : nil }
+        }
+        if let validPreferred {
+            preferredInstanceIdByType[type] = validPreferred
+            return
+        }
+
+        preferredInstanceIdByType[type] = instances(for: type).first?.id
+    }
+
+    private func handleUnauthorized(instanceId: UUID) async {
+        guard let current = instancesById[instanceId] else { return }
+
+        if current.type == .pihole,
+           let password = current.piHoleStoredSecret,
            !password.isEmpty {
             do {
-                let refreshedSID = try await piholeClient.authenticate(url: conn.url, password: password)
+                let client = clientManager.piholeClient(id: instanceId)
+                let refreshedSID = try await client.authenticate(url: current.url, password: password)
                 let authMode: PiHoleAuthMode = refreshedSID == password ? .legacy : .session
-                let refreshed = conn.updatingToken(refreshedSID, piholeAuthMode: authMode)
-                connections[type] = refreshed
-                await configureClient(for: type, with: refreshed)
-                KeychainService.saveConnections(connections)
+                let refreshed = current.updatingToken(refreshedSID, piholeAuthMode: authMode)
+                instancesById[instanceId] = refreshed
+                persistState()
+                await configureClient(for: refreshed, refreshPiHoleAuth: false)
                 return
             } catch {
-                // Fall back to disconnect only if session refresh fails.
+                // Fall through to deleting only the affected instance.
             }
         }
 
-        disconnectService(type)
+        deleteInstance(id: instanceId)
     }
 
-    private func configureClient(for type: ServiceType, with conn: ServiceConnection) async {
-        switch type {
+    private func configureClient(for instance: ServiceInstance, refreshPiHoleAuth: Bool) async {
+        switch instance.type {
         case .portainer:
-            if let apiKey = conn.apiKey, !apiKey.isEmpty {
-                await portainerClient.configureWithApiKey(url: conn.url, apiKey: apiKey, fallbackUrl: conn.fallbackUrl)
+            let client = clientManager.portainerClient(id: instance.id)
+            if let apiKey = instance.apiKey, !apiKey.isEmpty {
+                await client.configureWithApiKey(url: instance.url, apiKey: apiKey, fallbackUrl: instance.fallbackUrl)
             } else {
-                await portainerClient.configure(url: conn.url, jwt: conn.token, fallbackUrl: conn.fallbackUrl)
+                await client.configure(url: instance.url, jwt: instance.token, fallbackUrl: instance.fallbackUrl)
             }
+
         case .pihole:
+            let client = clientManager.piholeClient(id: instance.id)
             let configuredSID: String
-            var authMode = conn.piholeAuthMode
-            if let password = conn.piHoleStoredSecret, !password.isEmpty {
+            var authMode = instance.piholeAuthMode
+
+            if refreshPiHoleAuth,
+               let password = instance.piHoleStoredSecret,
+               !password.isEmpty {
                 do {
-                    configuredSID = try await piholeClient.authenticate(url: conn.url, password: password)
+                    configuredSID = try await client.authenticate(url: instance.url, password: password)
                     authMode = configuredSID == password ? .legacy : .session
-                    let refreshed = conn.updatingToken(configuredSID, piholeAuthMode: authMode)
-                    if refreshed != conn {
-                        connections[type] = refreshed
-                        KeychainService.saveConnections(connections)
+                    let refreshed = instance.updatingToken(configuredSID, piholeAuthMode: authMode)
+                    if refreshed != instance {
+                        instancesById[instance.id] = refreshed
+                        persistState()
                     }
                 } catch {
-                    configuredSID = conn.token
+                    configuredSID = instance.token
                 }
             } else {
-                configuredSID = conn.token
+                configuredSID = instance.token
             }
-            await piholeClient.configure(url: conn.url, sid: configuredSID, authMode: authMode, fallbackUrl: conn.fallbackUrl)
+
+            await client.configure(url: instance.url, sid: configuredSID, authMode: authMode, fallbackUrl: instance.fallbackUrl)
+
         case .beszel:
-            await beszelClient.configure(url: conn.url, token: conn.token, fallbackUrl: conn.fallbackUrl)
+            let client = clientManager.beszelClient(id: instance.id)
+            await client.configure(url: instance.url, token: instance.token, fallbackUrl: instance.fallbackUrl)
+
         case .gitea:
-            await giteaClient.configure(url: conn.url, token: conn.token, fallbackUrl: conn.fallbackUrl)
+            let client = clientManager.giteaClient(id: instance.id)
+            await client.configure(url: instance.url, token: instance.token, fallbackUrl: instance.fallbackUrl)
         }
     }
 }

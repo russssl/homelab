@@ -132,7 +132,7 @@ private fun WelcomeScreen(onNext: () -> Unit) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Home,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.onboarding_welcome),
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -198,7 +198,7 @@ private fun AskSetupScreen(onYes: () -> Unit, onNo: () -> Unit) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Shield,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.security_title),
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.secondary
                 )

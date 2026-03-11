@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct PiholeDomainListView: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
 
@@ -26,6 +28,7 @@ struct PiholeDomainListView: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                         .foregroundStyle(AppTheme.stopped)
+                        .accessibilityHidden(true)
                     Text(error.localizedDescription)
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
@@ -38,7 +41,7 @@ struct PiholeDomainListView: View {
                 .padding()
             } else {
                 VStack(spacing: 0) {
-                    Picker("List Type", selection: $selectedTab) {
+                    Picker(localizer.t.piholeListType, selection: $selectedTab) {
                         Text(localizer.t.piholeAllowed).tag(PiholeDomainListType.allow)
                         Text(localizer.t.piholeBlocked).tag(PiholeDomainListType.deny)
                     }
@@ -57,6 +60,7 @@ struct PiholeDomainListView: View {
                                 HStack {
                                     Image(systemName: selectedTab == .allow ? "checkmark.circle.fill" : "xmark.circle.fill")
                                         .foregroundStyle(selectedTab == .allow ? AppTheme.running : AppTheme.stopped)
+                                        .accessibilityHidden(true)
                                     Text(domain.domain)
                                         .font(.body)
                                 }
@@ -84,13 +88,14 @@ struct PiholeDomainListView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel(localizer.t.piholeAddDomain)
             }
         }
         .task {
             await fetchDomains()
         }
         .alert(localizer.t.piholeAddDomain, isPresented: $showingAddAlert) {
-            TextField("example.com", text: $newDomainText)
+            TextField(localizer.t.piholeDomainPlaceholder, text: $newDomainText)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -108,7 +113,10 @@ struct PiholeDomainListView: View {
         isLoading = true
         error = nil
         do {
-            domains = try await servicesStore.piholeClient.getDomains()
+            guard let client = await servicesStore.piholeClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            domains = try await client.getDomains()
         } catch {
             self.error = error
         }
@@ -119,7 +127,10 @@ struct PiholeDomainListView: View {
         guard !newDomainText.isEmpty else { return }
         let url = newDomainText.trimmingCharacters(in: .whitespaces)
         do {
-            try await servicesStore.piholeClient.addDomain(domain: url, to: selectedTab)
+            guard let client = await servicesStore.piholeClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            try await client.addDomain(domain: url, to: selectedTab)
             await fetchDomains()
         } catch {
             self.error = error
@@ -129,7 +140,10 @@ struct PiholeDomainListView: View {
     private func removeDomain(_ item: PiholeDomain) async {
         guard let type = item.type else { return }
         do {
-            try await servicesStore.piholeClient.removeDomain(domain: item.domain, from: type)
+            guard let client = await servicesStore.piholeClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            try await client.removeDomain(domain: item.domain, from: type)
             if let index = domains.firstIndex(where: { $0.id == item.id }) {
                 domains.remove(at: index)
             }

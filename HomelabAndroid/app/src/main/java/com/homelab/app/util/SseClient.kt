@@ -16,10 +16,11 @@ import javax.inject.Singleton
 class SseClient @Inject constructor(
     private val okHttpClient: OkHttpClient
 ) {
-    fun connectToSse(url: String, serviceType: ServiceType): Flow<String> = callbackFlow {
+    fun connectToSse(url: String, serviceType: ServiceType, instanceId: String): Flow<String> = callbackFlow {
         val request = Request.Builder()
             .url(url)
             .addHeader("Accept", "text/event-stream")
+            .addHeader("X-Homelab-Instance-Id", instanceId)
             .addHeader("X-Homelab-Service", when(serviceType) {
                 ServiceType.PORTAINER -> "Portainer"
                 ServiceType.PIHOLE -> "Pihole"

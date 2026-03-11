@@ -3,21 +3,32 @@ import SwiftUI
 // Maps to app/beszel/index.tsx — system list with overview + metrics
 
 struct BeszelDashboard: View {
+    let instanceId: UUID
+
     @Environment(ServicesStore.self) private var servicesStore
     @Environment(Localizer.self) private var localizer
 
+    @State private var selectedInstanceId: UUID
     @State private var systems: [BeszelSystem] = []
     @State private var state: LoadableState<Void> = .idle
 
     private let beszelColor = Color(hex: "#0EA5E9")
     private let memoryColor = Color(hex: "#8B5CF6")
 
+    init(instanceId: UUID) {
+        self.instanceId = instanceId
+        _selectedInstanceId = State(initialValue: instanceId)
+    }
+
     var body: some View {
         ServiceDashboardLayout(
             serviceType: .beszel,
+            instanceId: selectedInstanceId,
             state: state,
             onRefresh: fetchSystems
         ) {
+            instancePicker
+
             overviewCard
 
             refreshHint
@@ -26,7 +37,7 @@ struct BeszelDashboard: View {
                 emptyState
             } else {
                 ForEach(systems) { system in
-                    NavigationLink(value: system.id) {
+                    NavigationLink(value: BeszelSystemRoute(instanceId: selectedInstanceId, systemId: system.id)) {
                         SystemCard(
                             system: system,
                             beszelColor: beszelColor,
@@ -40,10 +51,51 @@ struct BeszelDashboard: View {
             }
         }
         .navigationTitle(localizer.t.serviceBeszel)
-        .navigationDestination(for: String.self) { systemId in
-            BeszelSystemDetail(systemId: systemId)
+        .navigationDestination(for: BeszelSystemRoute.self) { route in
+            BeszelSystemDetail(instanceId: route.instanceId, systemId: route.systemId)
         }
-        .task { await fetchSystems() }
+        .task(id: selectedInstanceId) { await fetchSystems() }
+    }
+
+    private var instancePicker: some View {
+        let instances = servicesStore.instances(for: .beszel)
+        return Group {
+            if instances.count > 1 {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(localizer.t.dashboardInstances)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.textMuted)
+                        .textCase(.uppercase)
+
+                    ForEach(instances) { instance in
+                        Button {
+                            HapticManager.light()
+                            selectedInstanceId = instance.id
+                            servicesStore.setPreferredInstance(id: instance.id, for: .beszel)
+                            systems = []
+                        } label: {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(instance.id == selectedInstanceId ? beszelColor : AppTheme.textMuted.opacity(0.4))
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(instance.displayLabel)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(instance.url)
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(14)
+                            .glassCard(tint: instance.id == selectedInstanceId ? beszelColor.opacity(0.1) : nil)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Overview Card
@@ -57,6 +109,7 @@ struct BeszelDashboard: View {
                 .foregroundStyle(beszelColor)
                 .frame(width: 48, height: 48)
                 .background(beszelColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizer.t.beszelSystems)
@@ -94,6 +147,7 @@ struct BeszelDashboard: View {
             Image(systemName: "arrow.clockwise")
                 .font(.caption2)
                 .foregroundStyle(AppTheme.textMuted)
+                .accessibilityHidden(true)
             Text(localizer.t.beszelRefreshRate)
                 .font(.caption)
                 .foregroundStyle(AppTheme.textMuted)
@@ -108,6 +162,7 @@ struct BeszelDashboard: View {
             Image(systemName: "server.rack")
                 .font(.system(size: 48))
                 .foregroundStyle(AppTheme.textMuted)
+                .accessibilityHidden(true)
             Text(localizer.t.beszelNoSystems)
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.textSecondary)
@@ -121,7 +176,11 @@ struct BeszelDashboard: View {
     private func fetchSystems() async {
         state = .loading
         do {
-            let response = try await servicesStore.beszelClient.getSystems()
+            guard let client = await servicesStore.beszelClient(instanceId: selectedInstanceId) else {
+                state = .error(.notConfigured)
+                return
+            }
+            let response = try await client.getSystems()
             systems = response.items
             state = .loaded(())
         } catch let apiError as APIError {
@@ -130,6 +189,11 @@ struct BeszelDashboard: View {
             state = .error(.custom(error.localizedDescription))
         }
     }
+}
+
+private struct BeszelSystemRoute: Hashable {
+    let instanceId: UUID
+    let systemId: String
 }
 
 // MARK: - System Card
@@ -214,9 +278,15 @@ private struct SystemCard: View {
             }
 
             // Host
-            Text("\(system.host):\(system.port)")
-                .font(.caption2)
-                .foregroundStyle(AppTheme.textMuted)
+            if let port = system.port {
+                Text("\(system.host):\(port)")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textMuted)
+            } else {
+                Text(system.host)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textMuted)
+            }
         }
         .padding(16)
         .glassCard()

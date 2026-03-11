@@ -16,21 +16,27 @@ class ServiceConnectionTest {
     }
 
     @Test
-    fun `serializes pihole auth fields`() {
-        val connection = ServiceConnection(
+    fun `serializes service instance fields`() {
+        val instance = ServiceInstance(
+            id = "instance-1",
             type = ServiceType.PIHOLE,
+            label = "Pi-hole Home",
             url = "https://pihole.local",
             token = "sid123",
             piholePassword = "secret",
-            piholeAuthMode = PiHoleAuthMode.SESSION
+            piholeAuthMode = PiHoleAuthMode.SESSION,
+            fallbackUrl = "https://pihole.example.com"
         )
 
-        val encoded = json.encodeToString(connection)
-        val decoded = json.decodeFromString<ServiceConnection>(encoded)
+        val encoded = json.encodeToString(instance)
+        val decoded = json.decodeFromString<ServiceInstance>(encoded)
 
+        assertEquals("instance-1", decoded.id)
+        assertEquals("Pi-hole Home", decoded.label)
         assertEquals("sid123", decoded.token)
         assertEquals("secret", decoded.piHoleStoredSecret)
         assertEquals(PiHoleAuthMode.SESSION, decoded.piholeAuthMode)
+        assertEquals("https://pihole.example.com", decoded.fallbackUrl)
     }
 
     @Test
@@ -50,5 +56,22 @@ class ServiceConnectionTest {
         assertEquals("legacy-secret", decoded.piHoleStoredSecret)
         assertNull(decoded.piholePassword)
         assertNull(decoded.piholeAuthMode)
+    }
+
+    @Test
+    fun `legacy connection migrates with display name label`() {
+        val legacy = ServiceConnection(
+            type = ServiceType.BESZEL,
+            url = "https://beszel.local",
+            token = "token-1",
+            username = "ops@example.com"
+        )
+
+        val migrated = legacy.migratedInstance("instance-2")
+
+        assertEquals("instance-2", migrated.id)
+        assertEquals(ServiceType.BESZEL, migrated.type)
+        assertEquals(ServiceType.BESZEL.displayName, migrated.label)
+        assertEquals("ops@example.com", migrated.username)
     }
 }

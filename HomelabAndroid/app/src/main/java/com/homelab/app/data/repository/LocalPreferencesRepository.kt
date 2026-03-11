@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.homelab.app.util.ServiceType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -51,6 +52,7 @@ class LocalPreferencesRepository @Inject constructor(
     private val THEME_KEY = stringPreferencesKey("theme_mode")
     private val LANG_KEY = stringPreferencesKey("language_mode")
     private val HIDDEN_SERVICES_KEY = stringPreferencesKey("hidden_services")
+    private val SERVICE_ORDER_KEY = stringPreferencesKey("service_order")
     private val PIN_KEY = stringPreferencesKey("app_pin")
     private val BIOMETRIC_KEY = booleanPreferencesKey("biometric_enabled")
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
@@ -104,6 +106,22 @@ class LocalPreferencesRepository @Inject constructor(
             if (raw.isBlank()) emptySet() else raw.split(",").toSet()
         }
 
+    val serviceOrder: Flow<List<ServiceType>> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val raw = preferences[SERVICE_ORDER_KEY]
+                ?.split(",")
+                ?.mapNotNull { ServiceType.entries.firstOrNull { type -> type.name == it } }
+                .orEmpty()
+            normalizeServiceOrder(raw)
+        }
+
     suspend fun toggleServiceVisibility(serviceKey: String) {
         dataStore.edit { preferences ->
             val raw = preferences[HIDDEN_SERVICES_KEY] ?: ""
@@ -114,6 +132,24 @@ class LocalPreferencesRepository @Inject constructor(
                 current.add(serviceKey)
             }
             preferences[HIDDEN_SERVICES_KEY] = current.joinToString(",")
+        }
+    }
+
+    suspend fun moveService(serviceType: ServiceType, offset: Int) {
+        dataStore.edit { preferences ->
+            val current = normalizeServiceOrder(
+                preferences[SERVICE_ORDER_KEY]
+                    ?.split(",")
+                    ?.mapNotNull { key -> ServiceType.entries.firstOrNull { it.name == key } }
+                    .orEmpty()
+            ).toMutableList()
+            val index = current.indexOf(serviceType)
+            if (index == -1) return@edit
+            val destination = index + offset
+            if (destination !in current.indices) return@edit
+            val moved = current.removeAt(index)
+            current.add(destination, moved)
+            preferences[SERVICE_ORDER_KEY] = current.joinToString(",") { it.name }
         }
     }
 
@@ -172,5 +208,15 @@ class LocalPreferencesRepository @Inject constructor(
             preferences.remove(PIN_KEY)
             preferences.remove(BIOMETRIC_KEY)
         }
+    }
+
+    private fun normalizeServiceOrder(order: List<ServiceType>): List<ServiceType> {
+        val visibleTypes = ServiceType.entries.filter { it != ServiceType.UNKNOWN }
+        val unique = buildList {
+            order.forEach { type ->
+                if (type != ServiceType.UNKNOWN && type !in this) add(type)
+            }
+        }
+        return unique + visibleTypes.filterNot(unique::contains)
     }
 }

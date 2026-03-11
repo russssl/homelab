@@ -85,7 +85,7 @@ final class BookmarksStore {
     func moveCategories(from source: IndexSet, to destination: Int) {
         categories.move(fromOffsets: source, toOffset: destination)
         // Recalculate sortOrders
-        for (index, cat) in categories.enumerated() {
+        for (index, _) in categories.enumerated() {
             categories[index].sortOrder = index
         }
         saveData()

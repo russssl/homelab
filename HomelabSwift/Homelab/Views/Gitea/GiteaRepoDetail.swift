@@ -5,6 +5,7 @@ import SwiftUI
 private let giteaColor = Color(hex: "#609926")
 
 struct GiteaRepoDetail: View {
+    let instanceId: UUID
     let owner: String
     let repoName: String
     var initialPath: String = ""
@@ -115,6 +116,7 @@ struct GiteaRepoDetail: View {
                 Image(systemName: repo.isPrivate ? "lock" : "lock.open")
                     .font(.subheadline)
                     .foregroundStyle(repo.isPrivate ? AppTheme.warning : AppTheme.textMuted)
+                    .accessibilityHidden(true)
                 Text(repo.full_name)
                     .font(.title3.bold())
                     .lineLimit(1)
@@ -133,6 +135,7 @@ struct GiteaRepoDetail: View {
                     Image(systemName: "star")
                         .font(.caption)
                         .foregroundStyle(AppTheme.warning)
+                        .accessibilityHidden(true)
                     Text("\(repo.stars_count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppTheme.textMuted)
@@ -141,6 +144,7 @@ struct GiteaRepoDetail: View {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.caption)
                         .foregroundStyle(AppTheme.info)
+                        .accessibilityHidden(true)
                     Text("\(branches.count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppTheme.textMuted)
@@ -149,6 +153,7 @@ struct GiteaRepoDetail: View {
                     Image(systemName: "circle.dotted")
                         .font(.caption)
                         .foregroundStyle(AppTheme.running)
+                        .accessibilityHidden(true)
                     Text("\(repo.open_issues_count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(AppTheme.textMuted)
@@ -178,11 +183,13 @@ struct GiteaRepoDetail: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 11))
+                            .accessibilityHidden(true)
                         Text(effectiveBranch)
                             .font(.caption.bold())
                             .lineLimit(1)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 11))
+                            .accessibilityHidden(true)
                     }
                     .foregroundStyle(giteaColor)
                     .padding(.horizontal, 10)
@@ -219,6 +226,7 @@ struct GiteaRepoDetail: View {
                     HStack(spacing: 5) {
                         Image(systemName: tabIcon(tab))
                             .font(.caption)
+                            .accessibilityHidden(true)
                         Text(tabLabel(tab))
                             .font(.caption.bold())
                             .lineLimit(1)
@@ -277,20 +285,22 @@ struct GiteaRepoDetail: View {
                 Image(systemName: "doc.text")
                     .font(.system(size: 32))
                     .foregroundStyle(AppTheme.textMuted)
+                    .accessibilityHidden(true)
                 Text(localizer.t.giteaNoFiles)
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.textMuted)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 40)
+                .padding(.vertical, 40)
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(sortedFiles.enumerated()), id: \.element.id) { index, file in
-                    NavigationLink(value: GiteaRepoRoute(owner: owner, repoName: repoName, path: file.path, isFile: !file.isDirectory, branch: effectiveBranch)) {
+                    NavigationLink(value: GiteaRepoRoute(instanceId: instanceId, owner: owner, repoName: repoName, path: file.path, isFile: !file.isDirectory, branch: effectiveBranch)) {
                         HStack(spacing: 12) {
                             Image(systemName: file.isDirectory ? "folder.fill" : "doc")
                                 .font(.title3)
                                 .foregroundStyle(file.isDirectory ? giteaColor : AppTheme.textMuted)
+                                .accessibilityHidden(true)
 
                             Text(file.name)
                                 .font(.subheadline.weight(.medium))
@@ -303,6 +313,7 @@ struct GiteaRepoDetail: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
                                     .foregroundStyle(AppTheme.textMuted)
+                                    .accessibilityHidden(true)
                             } else if file.size > 0 {
                                 Text(Formatters.formatBytes(Double(file.size)))
                                     .font(.caption2)
@@ -390,6 +401,7 @@ struct GiteaRepoDetail: View {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
                         .font(.caption)
                         .foregroundStyle(giteaColor)
+                        .accessibilityHidden(true)
                     Text(file.name)
                         .font(.subheadline.bold())
                         .lineLimit(1)
@@ -411,6 +423,7 @@ struct GiteaRepoDetail: View {
                         Image(systemName: "doc.text")
                             .font(.system(size: 48))
                             .foregroundStyle(AppTheme.textMuted)
+                            .accessibilityHidden(true)
                         Text(String(format: localizer.t.giteaFileTooLarge, Formatters.formatBytes(Double(file.size))))
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.textSecondary)
@@ -461,7 +474,8 @@ struct GiteaRepoDetail: View {
                 Image(systemName: "book")
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.textMuted)
-                Text("README.md")
+                    .accessibilityHidden(true)
+                Text(localizer.t.giteaReadme)
                     .font(.subheadline.bold())
             }
             .padding(.horizontal, 16)
@@ -573,6 +587,7 @@ struct GiteaRepoDetail: View {
                                     HStack(spacing: 2) {
                                         Image(systemName: "bubble.right")
                                             .font(.system(size: 10))
+                                            .accessibilityHidden(true)
                                         Text("\(issue.comments)")
                                             .font(.caption2)
                                     }
@@ -619,7 +634,7 @@ struct GiteaRepoDetail: View {
         if isLoadingContent && branches.isEmpty {
             ProgressView().tint(giteaColor).frame(maxWidth: .infinity, minHeight: 100)
         } else if branches.isEmpty {
-            emptyState(icon: "arrow.triangle.branch", text: localizer.t.giteaNoFiles)
+            emptyState(icon: "arrow.triangle.branch", text: localizer.t.giteaNoBranches)
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(branches.enumerated()), id: \.element.id) { index, branch in
@@ -627,6 +642,7 @@ struct GiteaRepoDetail: View {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.subheadline)
                             .foregroundStyle(giteaColor)
+                            .accessibilityHidden(true)
                             .frame(width: 36, height: 36)
                             .background(giteaColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
@@ -640,10 +656,11 @@ struct GiteaRepoDetail: View {
                                     Image(systemName: "shield")
                                         .font(.system(size: 10))
                                         .foregroundStyle(AppTheme.warning)
+                                        .accessibilityHidden(true)
                                 }
 
                                 if branch.name == repo?.default_branch {
-                                    Text("default")
+                                    Text(localizer.t.giteaDefault)
                                         .font(.system(size: 10, weight: .semibold))
                                         .foregroundStyle(giteaColor)
                                         .padding(.horizontal, 6)
@@ -687,6 +704,7 @@ struct GiteaRepoDetail: View {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.triangle.branch")
                             .foregroundStyle(effectiveBranch == branch.name ? giteaColor : AppTheme.textMuted)
+                            .accessibilityHidden(true)
                         Text(branch.name)
                             .foregroundStyle(effectiveBranch == branch.name ? giteaColor : .primary)
                             .fontWeight(effectiveBranch == branch.name ? .semibold : .regular)
@@ -694,7 +712,7 @@ struct GiteaRepoDetail: View {
                         Spacer()
 
                         if branch.name == repo?.default_branch {
-                            Text("default")
+                            Text(localizer.t.giteaDefault)
                                 .font(.caption2.bold())
                                 .foregroundStyle(giteaColor)
                                 .padding(.horizontal, 6)
@@ -769,7 +787,10 @@ struct GiteaRepoDetail: View {
         isLoadingContent = true
         defer { isLoadingContent = false }
         do {
-            viewingFile = try await servicesStore.giteaClient.getFileContent(owner: owner, repo: repoName, path: initialPath, ref: effectiveBranch)
+            guard let client = await servicesStore.giteaClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            viewingFile = try await client.getFileContent(owner: owner, repo: repoName, path: initialPath, ref: effectiveBranch)
         } catch {
             fetchError = error.localizedDescription
             showFetchError = true
@@ -778,8 +799,11 @@ struct GiteaRepoDetail: View {
 
     private func fetchRepo() async {
         do {
-            async let r = servicesStore.giteaClient.getRepo(owner: owner, repo: repoName)
-            async let b = { try? await servicesStore.giteaClient.getRepoBranches(owner: owner, repo: repoName) }()
+            guard let client = await servicesStore.giteaClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            async let r = client.getRepo(owner: owner, repo: repoName)
+            async let b = { try? await client.getRepoBranches(owner: owner, repo: repoName) }()
 
             repo = try await r
             if let fetchedBranches = await b { branches = fetchedBranches }
@@ -798,7 +822,10 @@ struct GiteaRepoDetail: View {
         defer { isLoadingContent = false }
 
         do {
-            files = try await servicesStore.giteaClient.getRepoContents(owner: owner, repo: repoName, path: initialPath, ref: effectiveBranch)
+            guard let client = await servicesStore.giteaClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            files = try await client.getRepoContents(owner: owner, repo: repoName, path: initialPath, ref: effectiveBranch)
         } catch {
             files = []
             // Only show error if we have no cached data
@@ -810,7 +837,9 @@ struct GiteaRepoDetail: View {
 
         // Fetch README only at root (non-critical)
         if initialPath.isEmpty {
-            readme = try? await servicesStore.giteaClient.getRepoReadme(owner: owner, repo: repoName, ref: effectiveBranch)
+            if let client = await servicesStore.giteaClient(instanceId: instanceId) {
+                readme = try? await client.getRepoReadme(owner: owner, repo: repoName, ref: effectiveBranch)
+            }
         } else {
             readme = nil
         }
@@ -821,7 +850,10 @@ struct GiteaRepoDetail: View {
         defer { isLoadingContent = false }
 
         do {
-            viewingFile = try await servicesStore.giteaClient.getFileContent(owner: owner, repo: repoName, path: file.path, ref: effectiveBranch)
+            guard let client = await servicesStore.giteaClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
+            viewingFile = try await client.getFileContent(owner: owner, repo: repoName, path: file.path, ref: effectiveBranch)
         } catch {
             fetchError = error.localizedDescription
             showFetchError = true
@@ -833,15 +865,18 @@ struct GiteaRepoDetail: View {
         defer { isLoadingContent = false }
 
         do {
+            guard let client = await servicesStore.giteaClient(instanceId: instanceId) else {
+                throw APIError.notConfigured
+            }
             switch tab {
             case .files:
                 await fetchFiles()
             case .commits:
-                commits = try await servicesStore.giteaClient.getRepoCommits(owner: owner, repo: repoName, page: 1, limit: 30, ref: effectiveBranch)
+                commits = try await client.getRepoCommits(owner: owner, repo: repoName, page: 1, limit: 30, ref: effectiveBranch)
             case .issues:
-                issues = try await servicesStore.giteaClient.getRepoIssues(owner: owner, repo: repoName, state: "open", page: 1, limit: 30)
+                issues = try await client.getRepoIssues(owner: owner, repo: repoName, state: "open", page: 1, limit: 30)
             case .branches:
-                branches = try await servicesStore.giteaClient.getRepoBranches(owner: owner, repo: repoName)
+                branches = try await client.getRepoBranches(owner: owner, repo: repoName)
             }
         } catch {
             fetchError = error.localizedDescription

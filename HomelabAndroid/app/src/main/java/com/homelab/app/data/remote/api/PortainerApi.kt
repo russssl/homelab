@@ -24,12 +24,14 @@ interface PortainerApi {
 
     @GET("api/endpoints")
     suspend fun getEndpoints(
-        @Header("X-Homelab-Service") service: String = "Portainer"
+        @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String
     ): List<PortainerEndpoint>
 
     @GET("api/endpoints/{id}/docker/containers/json")
     suspend fun getContainers(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Query("all") all: Boolean = true
     ): List<PortainerContainer>
@@ -37,6 +39,7 @@ interface PortainerApi {
     @GET("api/endpoints/{id}/docker/containers/{containerId}/json")
     suspend fun getContainerDetail(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String
     ): ContainerDetail
@@ -44,6 +47,7 @@ interface PortainerApi {
     @GET("api/endpoints/{id}/docker/containers/{containerId}/stats")
     suspend fun getContainerStats(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String,
         @Query("stream") stream: Boolean = false
@@ -52,6 +56,7 @@ interface PortainerApi {
     @GET("api/endpoints/{id}/docker/containers/{containerId}/logs")
     suspend fun getContainerLogs(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String,
         @Query("stdout") stdout: Boolean = true,
@@ -63,6 +68,7 @@ interface PortainerApi {
     @POST("api/endpoints/{id}/docker/containers/{containerId}/{action}")
     suspend fun containerAction(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String,
         @Path("action") action: String
@@ -71,6 +77,7 @@ interface PortainerApi {
     @DELETE("api/endpoints/{id}/docker/containers/{containerId}")
     suspend fun removeContainer(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String,
         @Query("force") force: Boolean = false
@@ -79,6 +86,7 @@ interface PortainerApi {
     @POST("api/endpoints/{id}/docker/containers/{containerId}/rename")
     suspend fun renameContainer(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") endpointId: Int,
         @Path("containerId") containerId: String,
         @Query("name") name: String
@@ -87,18 +95,21 @@ interface PortainerApi {
     @GET("api/stacks")
     suspend fun getStacks(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("filters") filters: String
     ): List<PortainerStack>
 
     @GET("api/stacks/{id}/file")
     suspend fun getStackFile(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") stackId: Int
     ): PortainerStackFile
 
     @PUT("api/stacks/{id}")
     suspend fun updateStackFile(
         @Header("X-Homelab-Service") service: String = "Portainer",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") stackId: Int,
         @Query("endpointId") endpointId: Int,
         @Body request: UpdateStackRequest

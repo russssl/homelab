@@ -31,10 +31,10 @@ fun LockScreen(
 
     // Auto-trigger biometric on appear
     LaunchedEffect(biometricEnabled) {
-        if (showBiometric && activity != null) {
+        if (showBiometric) {
             delay(300)
             BiometricHelper.authenticate(
-                activity = activity,
+                activity = activity ?: return@LaunchedEffect,
                 title = biometricTitle,
                 subtitle = biometricSubtitle,
                 negativeButtonText = cancelText,

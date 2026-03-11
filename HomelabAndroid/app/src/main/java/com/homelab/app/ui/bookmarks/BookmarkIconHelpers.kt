@@ -117,6 +117,7 @@ internal fun extractSelfhstService(raw: String): String {
 internal fun FallbackRemoteIcon(
     urls: List<String>,
     modifier: Modifier = Modifier,
+    contentDescription: String? = null,
     loading: @Composable () -> Unit,
     fallback: @Composable () -> Unit
 ) {
@@ -130,7 +131,7 @@ internal fun FallbackRemoteIcon(
 
     SubcomposeAsyncImage(
         model = current,
-        contentDescription = null,
+        contentDescription = contentDescription,
         modifier = modifier,
         loading = { loading() },
         error = {

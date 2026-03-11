@@ -45,10 +45,10 @@ struct BookmarkFormView: View {
                 }
                 
                 Section(header: Text(localizer.t.bookmarkIcon)) {
-                    Toggle("Use Website Favicon", isOn: $useFavicon)
+                    Toggle(localizer.t.bookmarkUseFavicon, isOn: $useFavicon)
                     
                     if !useFavicon {
-                        TextField("SF Symbol Name (e.g., 'link', 'star.fill')", text: $iconValue)
+                        TextField(localizer.t.bookmarkSfSymbolPrompt, text: $iconValue)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }

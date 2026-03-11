@@ -21,6 +21,12 @@ struct HomelabApp: App {
                     LockScreenView {
                         isUnlocked = true
                     }
+                } else if !servicesStore.isReady {
+                    ZStack {
+                        Color(.systemBackground).ignoresSafeArea()
+                        ProgressView()
+                            .controlSize(.large)
+                    }
                 } else {
                     ContentView()
                 }

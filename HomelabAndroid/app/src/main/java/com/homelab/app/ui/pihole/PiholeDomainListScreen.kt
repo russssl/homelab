@@ -177,7 +177,7 @@ fun PiholeDomainListScreen(
                                         ) {
                                             Icon(
                                                 Icons.Default.CheckCircle,
-                                                contentDescription = null,
+                                                contentDescription = if (selectedListType == PiholeDomainListType.ALLOW) stringResource(R.string.pihole_allowed) else stringResource(R.string.pihole_blocked_list),
                                                 tint = if (selectedListType == PiholeDomainListType.ALLOW) StatusGreen else StatusRed
                                             )
                                             Spacer(modifier = Modifier.width(16.dp))
@@ -209,7 +209,7 @@ fun PiholeDomainListScreen(
                     OutlinedTextField(
                         value = newDomainText,
                         onValueChange = { newDomainText = it },
-                        label = { Text("example.com") },
+                        label = { Text(stringResource(R.string.pihole_domain_placeholder)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()

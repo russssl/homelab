@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.homelab.app.R
 import androidx.compose.ui.platform.ClipEntry
@@ -38,6 +39,7 @@ import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.homelab.app.domain.model.ServiceInstance
 import com.homelab.app.util.ServiceType
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -45,10 +47,15 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onNavigateToLogin: (ServiceType, String?) -> Unit = { _, _ -> },
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val languageMode by viewModel.languageMode.collectAsStateWithLifecycle()
+    val instancesByType by viewModel.instancesByType.collectAsStateWithLifecycle()
+    val preferredInstanceIdByType by viewModel.preferredInstanceIdByType.collectAsStateWithLifecycle()
+    val hiddenServices by viewModel.hiddenServices.collectAsStateWithLifecycle()
+    val serviceOrder by viewModel.serviceOrder.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -104,7 +111,7 @@ fun SettingsScreen(
                             onClick = { 
                                 scope.launch {
                                     clipboard.setClipEntry(
-                                        ClipEntry(ClipData.newPlainText("Homelab donation address", cryptoAddress))
+                                        ClipEntry(ClipData.newPlainText(context.getString(R.string.settings_donation_clip_label), cryptoAddress))
                                     )
                                     Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
                                 }
@@ -240,7 +247,7 @@ fun SettingsScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Fingerprint,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.security_enable_biometric),
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(24.dp)
                                         )
@@ -277,7 +284,7 @@ fun SettingsScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Key,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.security_change_pin),
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(24.dp)
                                         )
@@ -290,7 +297,7 @@ fun SettingsScreen(
                                         )
                                         Icon(
                                             imageVector = Icons.Default.ChevronRight,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.security_change_pin),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -309,7 +316,7 @@ fun SettingsScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.LockOpen,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.security_disable),
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(24.dp)
                                         )
@@ -331,7 +338,7 @@ fun SettingsScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.LockOpen,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(R.string.security_not_configured),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -453,7 +460,7 @@ fun SettingsScreen(
                                     .align(Alignment.TopStart)
                                     .padding(top = 48.dp, start = 8.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
                             }
                         }
                     }
@@ -471,8 +478,23 @@ fun SettingsScreen(
                 )
             }
 
-            items(ServiceType.entries.filter { it != ServiceType.UNKNOWN }) { type ->
-                ServiceSettingsRow(type, viewModel)
+            items(serviceOrder) { type ->
+                val index = serviceOrder.indexOf(type)
+                ServiceSettingsSection(
+                    type = type,
+                    instances = instancesByType[type].orEmpty(),
+                    preferredInstanceId = preferredInstanceIdByType[type],
+                    isHidden = hiddenServices.contains(type.name),
+                    canMoveUp = index > 0,
+                    canMoveDown = index in 0 until serviceOrder.lastIndex,
+                    onToggleVisibility = { viewModel.toggleServiceVisibility(type) },
+                    onMoveUp = { viewModel.moveService(type, -1) },
+                    onMoveDown = { viewModel.moveService(type, 1) },
+                    onAdd = { onNavigateToLogin(type, null) },
+                    onEdit = { instance -> onNavigateToLogin(type, instance.id) },
+                    onDelete = { instance -> viewModel.deleteInstance(instance.id) },
+                    onSetDefault = { instance -> viewModel.setPreferredInstance(type, instance.id) }
+                )
             }
 
             // --- CONTACTS ---
@@ -500,7 +522,7 @@ fun SettingsScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "Telegram",
+                                text = stringResource(R.string.settings_contact_telegram),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -517,7 +539,7 @@ fun SettingsScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "Reddit",
+                                text = stringResource(R.string.settings_contact_reddit),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -534,7 +556,7 @@ fun SettingsScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "GitHub",
+                                text = stringResource(R.string.settings_contact_github),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -550,19 +572,22 @@ fun SettingsScreen(
 }
 
 @Composable
-fun ServiceSettingsRow(
+fun ServiceSettingsSection(
     type: ServiceType,
-    viewModel: SettingsViewModel
+    instances: List<ServiceInstance>,
+    preferredInstanceId: String?,
+    isHidden: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onToggleVisibility: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onAdd: () -> Unit,
+    onEdit: (ServiceInstance) -> Unit,
+    onDelete: (ServiceInstance) -> Unit,
+    onSetDefault: (ServiceInstance) -> Unit
 ) {
-    val connections by viewModel.connections.collectAsStateWithLifecycle()
-    val connection = connections[type]
-    val isConnected = connection != null
-
-    var showDisconnectDialog by remember { mutableStateOf(false) }
-    var fallbackInput by remember(connection?.fallbackUrl) { mutableStateOf(connection?.fallbackUrl ?: "") }
-
-    val hiddenServices by viewModel.hiddenServices.collectAsStateWithLifecycle()
-    val isHidden = hiddenServices.contains(type.name)
+    var pendingDelete by remember { mutableStateOf<ServiceInstance?>(null) }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -573,177 +598,259 @@ fun ServiceSettingsRow(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    // Placeholder Icon
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.size(32.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = type.name.first().toString(),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
-                            text = type.name.lowercase().replaceFirstChar { it.uppercase() },
+                            text = type.displayName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        if (isConnected) {
+                        if (isHidden) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_hidden_badge),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
                             Text(
-                                text = connection?.url ?: "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                              )
-                        } else {
-                            Text(
-                                text = stringResource(R.string.settings_not_connected),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = instances.size.toString(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
+                    Text(
+                        text = if (instances.isEmpty()) {
+                            stringResource(R.string.service_instances_empty)
+                        } else {
+                            pluralStringResource(R.plurals.settings_instances_available, instances.size, instances.size)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
-                // Visibility toggle
-                IconButton(
-                    onClick = { viewModel.toggleServiceVisibility(type) }
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isHidden) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.primaryContainer
-                    ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    IconButton(onClick = onMoveUp, enabled = canMoveUp) {
                         Icon(
-                            imageVector = if (isHidden) androidx.compose.material.icons.Icons.Filled.VisibilityOff
-                                          else androidx.compose.material.icons.Icons.Filled.Visibility,
-                            contentDescription = if (isHidden) stringResource(R.string.settings_show_service) else stringResource(R.string.settings_hide_service),
-                            tint = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(8.dp).size(16.dp)
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = stringResource(R.string.settings_move_up)
                         )
                     }
-                }
-
-                if (isConnected) {
-                    IconButton(
-                        onClick = { showDisconnectDialog = true }
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = stringResource(R.string.settings_disconnect),
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(8.dp).size(20.dp)
-                            )
-                        }
+                    IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.settings_move_down)
+                        )
                     }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                    )
+                    IconButton(onClick = onToggleVisibility) {
+                        Icon(
+                            imageVector = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (isHidden) stringResource(R.string.settings_show_service) else stringResource(R.string.settings_hide_service)
+                        )
+                    }
                 }
             }
 
-            if (isConnected) {
+            FilledTonalButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.settings_add_instance))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.settings_add_instance))
+            }
+
+            if (instances.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-                    color = Color.Transparent,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (fallbackInput.isEmpty()) {
-                            Text(
-                                stringResource(R.string.settings_fallback_url),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
-                        BasicTextField(
-                            value = fallbackInput,
-                            onValueChange = { fallbackInput = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onFocusChanged { state ->
-                                    if (!state.isFocused && fallbackInput != connection?.fallbackUrl) {
-                                        viewModel.saveFallbackUrl(type, fallbackInput)
-                                    }
-                                },
-                            textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Uri,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    viewModel.saveFallbackUrl(type, fallbackInput)
-                                }
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.settings_add_instance),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(R.string.service_instances_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            } else {
+                instances.forEach { instance ->
+                    ServiceInstanceRow(
+                        instance = instance,
+                        isPreferred = instance.id == preferredInstanceId,
+                        onEdit = { onEdit(instance) },
+                        onDelete = { pendingDelete = instance },
+                        onSetDefault = { onSetDefault(instance) }
+                    )
                 }
             }
         }
     }
 
-    if (showDisconnectDialog) {
+    pendingDelete?.let { instance ->
         AlertDialog(
-            onDismissRequest = { showDisconnectDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text(stringResource(R.string.settings_disconnect_confirm_title, type.name.lowercase())) },
-            text = { Text(stringResource(R.string.settings_disconnect_confirm_desc)) },
+            onDismissRequest = { pendingDelete = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = stringResource(R.string.delete)) },
+            title = { Text(stringResource(R.string.settings_delete_instance_title, instance.label.ifBlank { type.displayName })) },
+            text = { Text(stringResource(R.string.settings_delete_instance_message)) },
             confirmButton = {
-                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                 Button(
                     onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        viewModel.disconnectService(type)
-                        showDisconnectDialog = false
+                        onDelete(instance)
+                        pendingDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text(stringResource(R.string.settings_disconnect))
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
-                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-                TextButton(onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    showDisconnectDialog = false
-                }) {
+                TextButton(onClick = { pendingDelete = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ServiceInstanceRow(
+    instance: ServiceInstance,
+    isPreferred: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onSetDefault: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = instance.type.displayName.take(1),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = instance.label.ifBlank { instance.type.displayName },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        if (isPreferred) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.home_default_badge),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = instance.url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    instance.fallbackUrl?.takeIf { it.isNotBlank() }?.let { fallback ->
+                        Text(
+                            text = stringResource(R.string.settings_fallback_value, fallback),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.edit))
+                }
+                if (!isPreferred) {
+                    FilledTonalButton(
+                        onClick = onSetDefault,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.settings_set_default))
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            }
+        }
     }
 }

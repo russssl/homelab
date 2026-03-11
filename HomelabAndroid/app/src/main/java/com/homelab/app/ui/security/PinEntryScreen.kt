@@ -3,6 +3,7 @@ package com.homelab.app.ui.security
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
@@ -15,6 +16,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -27,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import com.homelab.app.R
 
 // MARK: - Reusable PIN Entry
 
@@ -46,11 +49,11 @@ fun PinEntryScreen(
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
-            repeat(4) {
-                shakeOffset.animateTo(10f, spring(stiffness = Spring.StiffnessHigh))
-                shakeOffset.animateTo(-10f, spring(stiffness = Spring.StiffnessHigh))
+            repeat(2) {
+                shakeOffset.animateTo(8f, spring(stiffness = 800f, dampingRatio = 0.7f))
+                shakeOffset.animateTo(-8f, spring(stiffness = 800f, dampingRatio = 0.7f))
             }
-            shakeOffset.animateTo(0f)
+            shakeOffset.animateTo(0f, spring(stiffness = 500f, dampingRatio = 0.8f))
             pin = ""
         }
     }
@@ -78,7 +81,7 @@ fun PinEntryScreen(
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.Lock,
-                        contentDescription = null,
+                        contentDescription = title,
                         modifier = Modifier.size(40.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -191,7 +194,7 @@ fun PinEntryScreen(
                         PadButton(onClick = onBiometricTap) {
                             Icon(
                                 imageVector = Icons.Default.Fingerprint,
-                                contentDescription = "Biometric",
+                                contentDescription = stringResource(R.string.security_enable_biometric),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -223,8 +226,8 @@ fun PinEntryScreen(
                         }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Backspace,
-                            contentDescription = "Delete",
+                            imageVector = Icons.AutoMirrored.Filled.Backspace,
+                            contentDescription = stringResource(R.string.delete),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }

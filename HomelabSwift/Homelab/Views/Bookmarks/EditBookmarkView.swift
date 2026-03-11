@@ -85,14 +85,16 @@ struct EditBookmarkView: View {
                                         case .failure:
                                             Image(systemName: "photo")
                                                 .foregroundStyle(AppTheme.textMuted)
+                                                .accessibilityHidden(true)
                                         default:
                                             ProgressView()
+                                                .accessibilityHidden(true)
                                         }
                                     }
                                     .frame(width: 36, height: 36)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                                    Text("Image URL preview")
+                                    Text(localizer.t.bookmarkImagePreview)
                                         .font(.caption)
                                         .foregroundStyle(AppTheme.textSecondary)
                                 }
@@ -128,6 +130,7 @@ struct EditBookmarkView: View {
                                                         default:
                                                             Image(systemName: "sparkles")
                                                                 .foregroundStyle(AppTheme.textMuted)
+                                                                .accessibilityHidden(true)
                                                         }
                                                     }
                                                     .frame(width: 24, height: 24)
@@ -160,8 +163,10 @@ struct EditBookmarkView: View {
                                         case .failure:
                                             Image(systemName: "exclamationmark.triangle")
                                                 .foregroundStyle(.orange)
+                                                .accessibilityHidden(true)
                                         default:
                                             ProgressView()
+                                                .accessibilityHidden(true)
                                         }
                                     }
                                     .frame(width: 36, height: 36)
@@ -172,7 +177,7 @@ struct EditBookmarkView: View {
                                         .foregroundStyle(AppTheme.textSecondary)
                                 }
                             } else {
-                                Text("selfh.st/icons")
+                                Text(localizer.t.bookmarkSelfhstHint)
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textMuted)
                             }
@@ -191,6 +196,7 @@ struct EditBookmarkView: View {
                                     .font(.title3)
                                     .foregroundStyle(AppTheme.textMuted)
                                     .frame(width: 36, height: 36)
+                                    .accessibilityHidden(true)
 
                                 Text(localizer.t.bookmarkEnterUrl)
                                     .font(.caption)

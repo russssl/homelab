@@ -1,17 +1,13 @@
 package com.homelab.app.data.repository
 
-import com.homelab.app.data.local.SettingsManager
 import com.homelab.app.data.remote.api.PortainerApi
 import com.homelab.app.data.remote.dto.portainer.*
-import com.homelab.app.util.ServiceType
-import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PortainerRepository @Inject constructor(
-    private val api: PortainerApi,
-    private val settingsManager: SettingsManager
+    private val api: PortainerApi
 ) {
 
     suspend fun authenticate(url: String, username: String, password: String): String {
@@ -36,63 +32,63 @@ class PortainerRepository @Inject constructor(
         }
     }
 
-    suspend fun getEndpoints(): List<PortainerEndpoint> {
-        return api.getEndpoints()
+    suspend fun getEndpoints(instanceId: String): List<PortainerEndpoint> {
+        return api.getEndpoints(instanceId = instanceId)
     }
 
-    suspend fun getContainers(endpointId: Int, all: Boolean = true): List<PortainerContainer> {
-        return api.getContainers(endpointId = endpointId, all = all)
+    suspend fun getContainers(instanceId: String, endpointId: Int, all: Boolean = true): List<PortainerContainer> {
+        return api.getContainers(instanceId = instanceId, endpointId = endpointId, all = all)
     }
 
-    suspend fun getContainerDetail(endpointId: Int, containerId: String): ContainerDetail {
-        return api.getContainerDetail(endpointId = endpointId, containerId = containerId)
+    suspend fun getContainerDetail(instanceId: String, endpointId: Int, containerId: String): ContainerDetail {
+        return api.getContainerDetail(instanceId = instanceId, endpointId = endpointId, containerId = containerId)
     }
 
-    suspend fun getContainerStats(endpointId: Int, containerId: String): ContainerStats {
-        return api.getContainerStats(endpointId = endpointId, containerId = containerId, stream = false)
+    suspend fun getContainerStats(instanceId: String, endpointId: Int, containerId: String): ContainerStats {
+        return api.getContainerStats(instanceId = instanceId, endpointId = endpointId, containerId = containerId, stream = false)
     }
 
-    suspend fun getContainerLogs(endpointId: Int, containerId: String, tail: Int = 100): String {
-        return api.getContainerLogs(endpointId = endpointId, containerId = containerId, tail = tail).string()
+    suspend fun getContainerLogs(instanceId: String, endpointId: Int, containerId: String, tail: Int = 100): String {
+        return api.getContainerLogs(instanceId = instanceId, endpointId = endpointId, containerId = containerId, tail = tail).string()
     }
 
-    suspend fun startContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.start.name)
+    suspend fun startContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.start.name)
 
-    suspend fun stopContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.stop.name)
+    suspend fun stopContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.stop.name)
 
-    suspend fun restartContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.restart.name)
+    suspend fun restartContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.restart.name)
 
-    suspend fun killContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.kill.name)
+    suspend fun killContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.kill.name)
 
-    suspend fun pauseContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.pause.name)
+    suspend fun pauseContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.pause.name)
 
-    suspend fun unpauseContainer(endpointId: Int, containerId: String) =
-        api.containerAction(endpointId = endpointId, containerId = containerId, action = ContainerAction.unpause.name)
+    suspend fun unpauseContainer(instanceId: String, endpointId: Int, containerId: String) =
+        api.containerAction(instanceId = instanceId, endpointId = endpointId, containerId = containerId, action = ContainerAction.unpause.name)
 
-    suspend fun removeContainer(endpointId: Int, containerId: String, force: Boolean = false) {
-        api.removeContainer(endpointId = endpointId, containerId = containerId, force = force)
+    suspend fun removeContainer(instanceId: String, endpointId: Int, containerId: String, force: Boolean = false) {
+        api.removeContainer(instanceId = instanceId, endpointId = endpointId, containerId = containerId, force = force)
     }
 
-    suspend fun renameContainer(endpointId: Int, containerId: String, newName: String) {
-        api.renameContainer(endpointId = endpointId, containerId = containerId, name = newName)
+    suspend fun renameContainer(instanceId: String, endpointId: Int, containerId: String, newName: String) {
+        api.renameContainer(instanceId = instanceId, endpointId = endpointId, containerId = containerId, name = newName)
     }
 
-    suspend fun getStacks(endpointId: Int): List<PortainerStack> {
+    suspend fun getStacks(instanceId: String, endpointId: Int): List<PortainerStack> {
         val filters = "{\"EndpointID\":$endpointId}"
-        return api.getStacks(filters = filters)
+        return api.getStacks(instanceId = instanceId, filters = filters)
     }
 
-    suspend fun getStackFile(stackId: Int): String {
-        return api.getStackFile(stackId = stackId).stackFileContent
+    suspend fun getStackFile(instanceId: String, stackId: Int): String {
+        return api.getStackFile(instanceId = instanceId, stackId = stackId).stackFileContent
     }
 
-    suspend fun updateStackFile(stackId: Int, endpointId: Int, stackFileContent: String) {
+    suspend fun updateStackFile(instanceId: String, stackId: Int, endpointId: Int, stackFileContent: String) {
         val req = UpdateStackRequest(stackFileContent = stackFileContent)
-        api.updateStackFile(stackId = stackId, endpointId = endpointId, request = req)
+        api.updateStackFile(instanceId = instanceId, stackId = stackId, endpointId = endpointId, request = req)
     }
 }

@@ -3,15 +3,14 @@ package com.homelab.app.data.remote
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.wifi.WifiManager
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
 import com.homelab.app.data.local.SettingsManager
-import com.homelab.app.util.ServiceType
+import com.homelab.app.data.repository.ServiceInstancesRepository
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,33 +18,24 @@ import javax.inject.Singleton
 @Singleton
 class SmartFallbackInterceptor @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
+    private val serviceInstancesRepository: ServiceInstancesRepository
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
 
-        // 1. Identificare a quale servizio è destinata la chiamata
-        val serviceHeader = request.header("X-Homelab-Service")
+        val instanceIdHeader = request.header("X-Homelab-Instance-Id")
         val bypassHeader = request.header("X-Homelab-Bypass")
-        
-        val serviceType = when (serviceHeader) {
-            "Portainer" -> ServiceType.PORTAINER
-            "Pihole" -> ServiceType.PIHOLE
-            "Beszel" -> ServiceType.BESZEL
-            "Gitea" -> ServiceType.GITEA
-            else -> ServiceType.UNKNOWN
-        }
 
-        if (serviceType == ServiceType.UNKNOWN || bypassHeader == "true") {
+        if (bypassHeader == "true" || instanceIdHeader.isNullOrBlank()) {
             return chain.proceed(request)
         }
 
-        // 2. Recuperare la configurazione specifica di questo servizio
-        val connection = runBlocking { settingsManager.getConnection(serviceType).firstOrNull() }
+        val connection = runBlocking { serviceInstancesRepository.getInstance(instanceIdHeader) }
             ?: return chain.proceed(request)
 
-        val configuredSsid = runBlocking { settingsManager.internalSsid.firstOrNull() }
+        val configuredSsid = runBlocking { settingsManager.internalSsid.first() }
         val isConnectedToHomeWifi = isHomeWifi(configuredSsid)
 
         // 3. Logica di Routing Primaria (Internal vs External)
@@ -61,7 +51,6 @@ class SmartFallbackInterceptor @Inject constructor(
                 .port(targetHost.port)
                 .build()
 
-            // Non rimuoviamo l'header X-Homelab-Service qui, lo farà l'AuthInterceptor subito dopo
             request = request.newBuilder()
                 .url(newUrl)
                 .build()

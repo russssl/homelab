@@ -2,6 +2,7 @@ import SwiftUI
 import LocalAuthentication
 
 struct PinEntryView: View {
+    @Environment(Localizer.self) private var localizer
     @Binding var pin: String
     let title: String
     let subtitle: String
@@ -103,6 +104,7 @@ struct PinEntryView: View {
                             .frame(width: buttonSize, height: buttonSize)
                     }
                     .glassEffect(.regular, in: .circle)
+                    .accessibilityLabel(localizer.t.delete)
                 }
             }
             .padding(.bottom, 16)
@@ -138,11 +140,13 @@ struct ShakeModifier: ViewModifier {
             .offset(x: shakeOffset)
             .onChange(of: shaking) { _, newValue in
                 if newValue {
-                    withAnimation(.default.repeatCount(4, autoreverses: true).speed(6)) {
-                        shakeOffset = 10
+                    withAnimation(.easeInOut(duration: 0.06).repeatCount(3, autoreverses: true)) {
+                        shakeOffset = 8
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        shakeOffset = 0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
+                            shakeOffset = 0
+                        }
                     }
                 }
             }

@@ -1,10 +1,14 @@
 import Foundation
 
 actor GiteaAPIClient {
-    private let engine = BaseNetworkEngine(serviceType: .gitea)
+    private let engine: BaseNetworkEngine
     private var baseURL: String = ""
     private var fallbackURL: String = ""
     private var token: String = ""
+
+    init(instanceId: UUID) {
+        self.engine = BaseNetworkEngine(serviceType: .gitea, instanceId: instanceId)
+    }
 
     // MARK: - Configuration
 

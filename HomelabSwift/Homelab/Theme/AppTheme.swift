@@ -128,8 +128,8 @@ enum AppTheme {
                 )
                 // Shadow for depth
                 .shadow(color: .black.opacity(isDark ? 0.3 : 0.1), radius: 10, y: 5)
-                .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+                .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+                .animation(.spring(response: 0.28, dampingFraction: 0.8), value: configuration.isPressed)
         }
     }
 }

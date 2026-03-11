@@ -3,8 +3,19 @@ import XCTest
 
 @MainActor
 final class ServicesStoreTests: XCTestCase {
+    private var backend: InMemoryKeychainBackend!
 
-    // MARK: - Initial State
+    override func setUp() {
+        super.setUp()
+        backend = InMemoryKeychainBackend()
+        KeychainService.backend = backend
+    }
+
+    override func tearDown() {
+        KeychainService.backend = SecurityKeychainBackend()
+        backend = nil
+        super.tearDown()
+    }
 
     func testInitialState() {
         let store = ServicesStore()
@@ -17,88 +28,124 @@ final class ServicesStoreTests: XCTestCase {
         XCTAssertNil(store.isReachable(.portainer))
     }
 
-    // MARK: - Connect / Disconnect
-
-    func testConnectService() async {
+    func testTwoInstancesOfSameTypeCoexist() async {
         let store = ServicesStore()
-        let conn = ServiceConnection(type: .portainer, url: "https://portainer.local", token: "jwt123")
+        let home = ServiceInstance(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            type: .portainer,
+            label: "Portainer Home",
+            url: "https://portainer-home.local",
+            apiKey: "home-key"
+        )
+        let office = ServiceInstance(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            type: .portainer,
+            label: "Portainer Office",
+            url: "https://portainer-office.local",
+            apiKey: "office-key"
+        )
 
-        await store.connectService(conn)
+        await store.saveInstance(home)
+        await store.saveInstance(office)
 
-        XCTAssertTrue(store.isConnected(.portainer))
-        XCTAssertEqual(store.connectedCount, 1)
-        XCTAssertNotNil(store.connection(for: .portainer))
-        XCTAssertEqual(store.connection(for: .portainer)?.url, "https://portainer.local")
+        XCTAssertEqual(store.instances(for: .portainer).count, 2)
+        XCTAssertEqual(store.connectedCount, 2)
+        XCTAssertEqual(
+            Set(store.instances(for: .portainer).map(\.displayLabel)),
+            ["Portainer Home", "Portainer Office"]
+        )
+        XCTAssertEqual(store.preferredInstance(for: .portainer)?.id, home.id)
     }
 
-    func testDisconnectService() async {
+    func testSetPreferredInstanceUpdatesPreferredPointer() async {
         let store = ServicesStore()
-        let conn = ServiceConnection(type: .pihole, url: "https://pihole.local", token: "sid123")
+        let first = ServiceInstance(type: .gitea, label: "Main", url: "https://gitea-main.local", token: "token-1")
+        let second = ServiceInstance(type: .gitea, label: "Backup", url: "https://gitea-backup.local", token: "token-2")
 
-        await store.connectService(conn)
-        XCTAssertTrue(store.isConnected(.pihole))
+        await store.saveInstance(first)
+        await store.saveInstance(second)
+        store.setPreferredInstance(id: second.id, for: .gitea)
 
-        store.disconnectService(.pihole)
-        XCTAssertFalse(store.isConnected(.pihole))
-        XCTAssertEqual(store.connectedCount, 0)
-        XCTAssertNil(store.connection(for: .pihole))
+        XCTAssertEqual(store.preferredInstance(for: .gitea)?.id, second.id)
     }
 
-    func testConnectMultipleServices() async {
+    func testDeletingPreferredRepairsPreferredPointer() async {
         let store = ServicesStore()
+        let first = ServiceInstance(type: .pihole, label: "Home", url: "https://pihole-home.local", token: "sid-home")
+        let second = ServiceInstance(type: .pihole, label: "Office", url: "https://pihole-office.local", token: "sid-office")
 
-        await store.connectService(ServiceConnection(type: .portainer, url: "https://p.local", token: "t1"))
-        await store.connectService(ServiceConnection(type: .pihole, url: "https://ph.local", token: "t2"))
-        await store.connectService(ServiceConnection(type: .beszel, url: "https://b.local", token: "t3"))
+        await store.saveInstance(first)
+        await store.saveInstance(second)
+        store.setPreferredInstance(id: second.id, for: .pihole)
 
-        XCTAssertEqual(store.connectedCount, 3)
-        XCTAssertTrue(store.isConnected(.portainer))
-        XCTAssertTrue(store.isConnected(.pihole))
-        XCTAssertTrue(store.isConnected(.beszel))
-        XCTAssertFalse(store.isConnected(.gitea))
+        store.deleteInstance(id: second.id)
+
+        XCTAssertEqual(store.instances(for: .pihole).count, 1)
+        XCTAssertEqual(store.preferredInstance(for: .pihole)?.id, first.id)
     }
 
-    // MARK: - Reachability
+    func testInitializeRepairsInvalidPreferredInstance() async {
+        let first = ServiceInstance(
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+            type: .beszel,
+            label: "Alpha",
+            url: "https://alpha.local",
+            token: "token-1"
+        )
+        let second = ServiceInstance(
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+            type: .beszel,
+            label: "Beta",
+            url: "https://beta.local",
+            token: "token-2"
+        )
 
-    func testReachabilityNilWhenNotConnected() {
+        KeychainService.saveServiceState(
+            ServiceStateV2(
+                instances: [first, second],
+                preferredInstanceIdByType: [.beszel: UUID()]
+            )
+        )
+
         let store = ServicesStore()
-        XCTAssertNil(store.isReachable(.portainer))
+        await store.initialize()
+        store.stopPeriodicHealthChecks()
+
+        XCTAssertEqual(store.preferredInstance(for: .beszel)?.id, first.id)
     }
 
-    func testIsPingingDefault() {
+    func testUnauthorizedNotificationOnlyRemovesAffectedInstance() async {
         let store = ServicesStore()
-        XCTAssertFalse(store.isPinging(.portainer))
-        XCTAssertFalse(store.isPinging(.pihole))
+        let first = ServiceInstance(
+            id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!,
+            type: .gitea,
+            label: "Primary",
+            url: "https://gitea-primary.local",
+            token: "token-primary"
+        )
+        let second = ServiceInstance(
+            id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
+            type: .gitea,
+            label: "Secondary",
+            url: "https://gitea-secondary.local",
+            token: "token-secondary"
+        )
+
+        await store.saveInstance(first)
+        await store.saveInstance(second)
+
+        NotificationCenter.default.post(
+            name: .serviceUnauthorized,
+            object: nil,
+            userInfo: ["instanceId": first.id]
+        )
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertNil(store.instance(id: first.id))
+        XCTAssertNotNil(store.instance(id: second.id))
+        XCTAssertEqual(store.instances(for: .gitea).count, 1)
     }
-
-    // MARK: - Update Fallback URL
-
-    func testUpdateFallbackURL() async {
-        let store = ServicesStore()
-        let conn = ServiceConnection(type: .gitea, url: "https://gitea.local", token: "tok")
-
-        await store.connectService(conn)
-        XCTAssertNil(store.connection(for: .gitea)?.fallbackUrl)
-
-        await store.updateFallbackURL(for: .gitea, fallbackUrl: "https://gitea.backup")
-        XCTAssertEqual(store.connection(for: .gitea)?.fallbackUrl, "https://gitea.backup")
-
-        // Empty string should clear fallback
-        await store.updateFallbackURL(for: .gitea, fallbackUrl: "")
-        XCTAssertNil(store.connection(for: .gitea)?.fallbackUrl)
-    }
-
-    // MARK: - ServiceType
-
-    func testServiceTypeAllCases() {
-        XCTAssertEqual(ServiceType.allCases.count, 4)
-        XCTAssertTrue(ServiceType.allCases.contains(.portainer))
-        XCTAssertTrue(ServiceType.allCases.contains(.pihole))
-        XCTAssertTrue(ServiceType.allCases.contains(.beszel))
-        XCTAssertTrue(ServiceType.allCases.contains(.gitea))
-    }
-
-    // MARK: - ServiceConnection
 
     func testServiceConnectionURLCleaning() {
         let conn = ServiceConnection(type: .portainer, url: "  https://portainer.local///  ", token: "t")
@@ -114,5 +161,25 @@ final class ServicesStoreTests: XCTestCase {
 
         let conn3 = ServiceConnection(type: .pihole, url: "https://pi.local", token: "t", fallbackUrl: "https://backup")
         XCTAssertEqual(conn3.fallbackUrl, "https://backup")
+    }
+}
+
+private final class InMemoryKeychainBackend: KeychainBackend, @unchecked Sendable {
+    private var storage: [String: Data] = [:]
+
+    func save(data: Data, service: String, account: String) {
+        storage[key(service: service, account: account)] = data
+    }
+
+    func load(service: String, account: String) -> Data? {
+        storage[key(service: service, account: account)]
+    }
+
+    func delete(service: String, account: String) {
+        storage.removeValue(forKey: key(service: service, account: account))
+    }
+
+    private func key(service: String, account: String) -> String {
+        "\(service)::\(account)"
     }
 }

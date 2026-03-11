@@ -18,7 +18,9 @@ secrets.json
 # IDE / Editor
 .claude/
 .idea/
+.vscode/
 .gradle/
+.gradle-home/
 .kotlin/
 *.iml
 
@@ -42,6 +44,7 @@ HomelabSwift/**/*.xcresult/
 *.hmap
 *.dSYM.zip
 *.dSYM
+*.xcarchive
 *.swp
 *~.nib
 
@@ -55,6 +58,7 @@ HomelabSwift/**/*.resolved
 # Android / Kotlin (HomelabAndroid)
 # ----------------------------
 HomelabAndroid/.gradle/
+HomelabAndroid/.gradle-home/
 HomelabAndroid/**/build/
 HomelabAndroid/app/build/
 HomelabAndroid/build/

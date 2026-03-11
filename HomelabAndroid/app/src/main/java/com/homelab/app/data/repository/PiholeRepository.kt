@@ -1,12 +1,9 @@
 package com.homelab.app.data.repository
 
-import com.homelab.app.util.ServiceType
-import com.homelab.app.data.local.SettingsManager
 import com.homelab.app.data.remote.api.PiholeApi
 import com.homelab.app.data.remote.dto.pihole.*
 import com.homelab.app.domain.model.PiHoleAuthMode
-import com.homelab.app.domain.model.ServiceConnection
-import kotlinx.coroutines.flow.firstOrNull
+import com.homelab.app.domain.model.ServiceInstance
 import kotlinx.serialization.json.*
 import retrofit2.HttpException
 import javax.inject.Inject
@@ -15,17 +12,17 @@ import javax.inject.Singleton
 @Singleton
 class PiholeRepository @Inject constructor(
     private val api: PiholeApi,
-    private val settingsManager: SettingsManager
+    private val serviceInstancesRepository: ServiceInstancesRepository
 ) {
-    private suspend fun getConnection(): ServiceConnection? {
-        return settingsManager.getConnection(ServiceType.PIHOLE).firstOrNull()
+    private suspend fun getInstance(instanceId: String): ServiceInstance? {
+        return serviceInstancesRepository.getInstance(instanceId)
     }
 
-    private fun getAuth(connection: ServiceConnection?): String? {
-        if (connection == null || connection.token.isBlank()) return null
-        return when (connection.piholeAuthMode) {
+    private fun getAuth(instance: ServiceInstance?): String? {
+        if (instance == null || instance.token.isBlank()) return null
+        return when (instance.piholeAuthMode) {
             PiHoleAuthMode.SESSION -> null
-            PiHoleAuthMode.LEGACY, null -> connection.token
+            PiHoleAuthMode.LEGACY, null -> instance.token
         }
     }
 
@@ -33,36 +30,34 @@ class PiholeRepository @Inject constructor(
         return error is HttpException && error.code() == 401
     }
 
-    private suspend fun refreshAuth(connection: ServiceConnection): String? {
-        val secret = connection.piHoleStoredSecret ?: return connection.token.takeIf { it.isNotBlank() }
-        val refreshed = authenticate(url = connection.url, password = secret)
+    private suspend fun refreshAuth(instance: ServiceInstance): String? {
+        val secret = instance.piHoleStoredSecret ?: return instance.token.takeIf { it.isNotBlank() }
+        val refreshed = authenticate(url = instance.url, password = secret)
         val mode = if (refreshed == secret) PiHoleAuthMode.LEGACY else PiHoleAuthMode.SESSION
-        val updated = connection.copy(
-            token = refreshed,
-            piholePassword = connection.piholePassword ?: secret,
-            piholeAuthMode = mode
+        val updated = instance.updatingToken(refreshed, mode).copy(
+            piholePassword = instance.piholePassword ?: secret
         )
-        if (updated != connection) {
-            settingsManager.saveConnection(updated)
+        if (updated != instance) {
+            serviceInstancesRepository.saveInstance(updated)
         }
         return updated.token
     }
 
-    private suspend fun <T> withAuthRetry(block: suspend (String?) -> T): T {
-        val connection = getConnection()
-        val auth = getAuth(connection)
+    private suspend fun <T> withAuthRetry(instanceId: String, block: suspend (String?) -> T): T {
+        val instance = getInstance(instanceId)
+        val auth = getAuth(instance)
         try {
             return block(auth)
         } catch (error: Exception) {
-            if (connection != null && isUnauthorized(error)) {
-                val oldToken = connection.token
+            if (instance != null && isUnauthorized(error)) {
+                val oldToken = instance.token
                 val refreshedToken = try {
-                    refreshAuth(connection)
+                    refreshAuth(instance)
                 } catch (_: Exception) {
                     null
                 }
-                val refreshedConnection = getConnection()
-                val retryAuth = getAuth(refreshedConnection ?: connection.copy(token = refreshedToken ?: oldToken))
+                val refreshedInstance = getInstance(instanceId)
+                val retryAuth = getAuth(refreshedInstance ?: instance.copy(token = refreshedToken ?: oldToken))
                 val tokenChanged = refreshedToken != null && refreshedToken != oldToken
                 if (tokenChanged || retryAuth != auth) {
                     return block(retryAuth)
@@ -104,106 +99,106 @@ class PiholeRepository @Inject constructor(
         throw authFailure ?: IllegalStateException("Authentication failed")
     }
 
-    suspend fun getStats(): PiholeStats = withAuthRetry { auth -> api.getStats(auth = auth) }
+    suspend fun getStats(instanceId: String): PiholeStats = withAuthRetry(instanceId) { auth -> api.getStats(instanceId = instanceId, auth = auth) }
 
-    suspend fun getBlockingStatus(): PiholeBlockingStatus = withAuthRetry { auth -> api.getBlockingStatus(auth = auth) }
+    suspend fun getBlockingStatus(instanceId: String): PiholeBlockingStatus = withAuthRetry(instanceId) { auth -> api.getBlockingStatus(instanceId = instanceId, auth = auth) }
 
-    suspend fun setBlocking(enabled: Boolean, timer: Int? = null) {
-        withAuthRetry { auth ->
-            api.setBlocking(auth = auth, request = PiholeBlockingRequest(blocking = enabled, timer = timer))
+    suspend fun setBlocking(instanceId: String, enabled: Boolean, timer: Int? = null) {
+        withAuthRetry(instanceId) { auth ->
+            api.setBlocking(instanceId = instanceId, auth = auth, request = PiholeBlockingRequest(blocking = enabled, timer = timer))
         }
     }
 
     // Domains (v6 + legacy v5)
-    suspend fun getDomains(): List<PiholeDomainDto> {
-        return withAuthRetry { auth ->
+    suspend fun getDomains(instanceId: String): List<PiholeDomainDto> {
+        return withAuthRetry(instanceId) { auth ->
             try {
-                val raw = api.getDomainsRaw(auth = auth)
+                val raw = api.getDomainsRaw(instanceId = instanceId, auth = auth)
                 PiholeDomainListResponse.fromJson(raw).domains
             } catch (e: Exception) {
-                val raw = api.getDomainsLegacy(auth = auth)
+                val raw = api.getDomainsLegacy(instanceId = instanceId, auth = auth)
                 PiholeDomainListResponse.fromJson(raw).domains
             }
         }
     }
 
-    suspend fun addDomain(domain: String, list: PiholeDomainListType) {
-        withAuthRetry { auth ->
+    suspend fun addDomain(instanceId: String, domain: String, list: PiholeDomainListType) {
+        withAuthRetry(instanceId) { auth ->
             try {
-                api.addDomain(list = list.value, auth = auth, request = PiholeAddDomainRequest(domain = domain))
+                api.addDomain(instanceId = instanceId, list = list.value, auth = auth, request = PiholeAddDomainRequest(domain = domain))
             } catch (e: Exception) {
                 val legacyList = if (list == PiholeDomainListType.ALLOW) "white" else "black"
-                api.addDomainLegacy(list = legacyList, domain = domain, auth = auth)
+                api.addDomainLegacy(instanceId = instanceId, list = legacyList, domain = domain, auth = auth)
             }
         }
     }
 
-    suspend fun removeDomain(domain: String, list: PiholeDomainListType) {
-        withAuthRetry { auth ->
+    suspend fun removeDomain(instanceId: String, domain: String, list: PiholeDomainListType) {
+        withAuthRetry(instanceId) { auth ->
             try {
-                api.removeDomain(list = list.value, domain = domain, auth = auth)
+                api.removeDomain(instanceId = instanceId, list = list.value, domain = domain, auth = auth)
             } catch (e: Exception) {
                 val legacyList = if (list == PiholeDomainListType.ALLOW) "white" else "black"
-                api.removeDomainLegacy(list = legacyList, domain = domain, auth = auth)
+                api.removeDomainLegacy(instanceId = instanceId, list = legacyList, domain = domain, auth = auth)
             }
         }
     }
 
-    suspend fun getTopDomains(count: Int = 10): List<PiholeTopItem> {
-        return withAuthRetry { auth ->
+    suspend fun getTopDomains(instanceId: String, count: Int = 10): List<PiholeTopItem> {
+        return withAuthRetry(instanceId) { auth ->
             try {
-                val raw = api.getTopDomains(auth = auth, count = count)
+                val raw = api.getTopDomains(instanceId = instanceId, auth = auth, count = count)
                 parseTopItems(raw, listOf("top_domains", "top_queries", "domains", "queries"))
             } catch (e: Exception) {
-                val raw = api.getTopQueries(auth = auth, count = count)
+                val raw = api.getTopQueries(instanceId = instanceId, auth = auth, count = count)
                 parseTopItems(raw, listOf("top_domains", "top_queries", "domains", "queries"))
             }
         }
     }
 
-    suspend fun getTopBlocked(count: Int = 10): List<PiholeTopItem> {
-        return withAuthRetry { auth ->
+    suspend fun getTopBlocked(instanceId: String, count: Int = 10): List<PiholeTopItem> {
+        return withAuthRetry(instanceId) { auth ->
             try {
-                val raw = api.getTopBlocked(auth = auth, count = count)
+                val raw = api.getTopBlocked(instanceId = instanceId, auth = auth, count = count)
                 parseTopItems(raw, listOf("top_blocked", "top_ads", "blocked", "ads"))
             } catch (e: Exception) {
-                val raw = api.getTopAds(auth = auth, count = count)
+                val raw = api.getTopAds(instanceId = instanceId, auth = auth, count = count)
                 parseTopItems(raw, listOf("top_blocked", "top_ads", "blocked", "ads"))
             }
         }
     }
 
-    suspend fun getTopClients(count: Int = 10): List<PiholeTopClient> {
-        return withAuthRetry { auth ->
+    suspend fun getTopClients(instanceId: String, count: Int = 10): List<PiholeTopClient> {
+        return withAuthRetry(instanceId) { auth ->
             try {
-                val raw = api.getTopClients(auth = auth, count = count)
+                val raw = api.getTopClients(instanceId = instanceId, auth = auth, count = count)
                 parseTopClients(raw)
             } catch (e: Exception) {
-                val raw = api.getTopSources(auth = auth, count = count)
+                val raw = api.getTopSources(instanceId = instanceId, auth = auth, count = count)
                 parseTopClients(raw)
             }
         }
     }
 
-    suspend fun getQueryHistory(): PiholeQueryHistory = withAuthRetry { auth -> api.getQueryHistory(auth = auth) }
+    suspend fun getQueryHistory(instanceId: String): PiholeQueryHistory = withAuthRetry(instanceId) { auth -> api.getQueryHistory(instanceId = instanceId, auth = auth) }
 
-    suspend fun getQueries(from: Long, until: Long): List<PiholeQueryLogEntry> {
-        return withAuthRetry { auth ->
+    suspend fun getQueries(instanceId: String, from: Long, until: Long): List<PiholeQueryLogEntry> {
+        return withAuthRetry(instanceId) { auth ->
             try {
-                val raw = api.getQueries(auth = auth, from = from, until = until)
+                val raw = api.getQueries(instanceId = instanceId, auth = auth, from = from, until = until)
                 val parsed = parseQueryEntries(raw)
                 if (parsed.isNotEmpty()) parsed else {
-                    val legacy = api.getQueriesLegacy(auth = auth, from = from, until = until)
+                    val legacy = api.getQueriesLegacy(instanceId = instanceId, auth = auth, from = from, until = until)
                     parseQueryEntries(legacy)
                 }
             } catch (e: Exception) {
-                val legacy = api.getQueriesLegacy(auth = auth, from = from, until = until)
+                val legacy = api.getQueriesLegacy(instanceId = instanceId, auth = auth, from = from, until = until)
                 parseQueryEntries(legacy)
             }
         }.sortedByDescending { it.timestamp }
     }
 
-    suspend fun getUpstreams(): PiholeUpstream = withAuthRetry { auth -> api.getUpstreams(auth = auth) }
+    suspend fun getUpstreams(instanceId: String): PiholeUpstream = withAuthRetry(instanceId) { auth -> api.getUpstreams(instanceId = instanceId, auth = auth) }
 
     // MARK: - Legacy / Dynamic Parsing (Matches iOS Swift logic for v5/v6 APIs)
 

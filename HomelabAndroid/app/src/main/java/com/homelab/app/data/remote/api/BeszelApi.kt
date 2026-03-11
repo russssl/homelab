@@ -18,18 +18,21 @@ interface BeszelApi {
 
     @GET("api/collections/systems/records?sort=-updated&perPage=50")
     suspend fun getSystems(
-        @Header("X-Homelab-Service") service: String = "Beszel"
+        @Header("X-Homelab-Service") service: String = "Beszel",
+        @Header("X-Homelab-Instance-Id") instanceId: String
     ): BeszelSystemsResponse
 
     @GET("api/collections/systems/records/{id}")
     suspend fun getSystem(
         @Header("X-Homelab-Service") service: String = "Beszel",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Path("id") id: String
     ): BeszelSystem
 
     @GET("api/collections/system_stats/records?sort=-created")
     suspend fun getSystemRecords(
         @Header("X-Homelab-Service") service: String = "Beszel",
+        @Header("X-Homelab-Instance-Id") instanceId: String,
         @Query("filter", encoded = true) filter: String,
         @Query("perPage") limit: Int = 60
     ): BeszelRecordsResponse

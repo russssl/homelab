@@ -12,11 +12,13 @@ extension Notification.Name {
 
 final class BaseNetworkEngine: Sendable {
     let serviceType: ServiceType
+    let instanceId: UUID
     private let timeoutInterval: TimeInterval = 8
     private let pingTimeout: TimeInterval = 3
 
-    init(serviceType: ServiceType) {
+    init(serviceType: ServiceType, instanceId: UUID) {
         self.serviceType = serviceType
+        self.instanceId = instanceId
     }
 
     // MARK: - Core Request (primary → fallback)
@@ -242,13 +244,16 @@ final class BaseNetworkEngine: Sendable {
         guard let http = response as? HTTPURLResponse else { return }
 
         if http.statusCode == 401 {
-            // Notify ServicesStore to disconnect — mirrors interceptResponse in api-client.ts
             let type = serviceType
+            let instanceId = instanceId
             Task { @MainActor in
                 NotificationCenter.default.post(
                     name: .serviceUnauthorized,
                     object: nil,
-                    userInfo: ["serviceType": type]
+                    userInfo: [
+                        "serviceType": type,
+                        "instanceId": instanceId
+                    ]
                 )
             }
             throw APIError.unauthorized

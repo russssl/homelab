@@ -37,6 +37,15 @@ public enum ServiceType: String, CaseIterable, Identifiable, Codable, Hashable, 
         }
     }
 
+    public var iconUrl: String {
+        switch self {
+        case .portainer: return "https://cdn.jsdelivr.net/gh/selfhst/icons/png/portainer.png"
+        case .pihole:    return "https://cdn.jsdelivr.net/gh/selfhst/icons/png/pi-hole.png"
+        case .beszel:    return "https://cdn.jsdelivr.net/gh/selfhst/icons/png/beszel.png"
+        case .gitea:     return "https://cdn.jsdelivr.net/gh/selfhst/icons/png/gitea.png"
+        }
+    }
+
     public var colors: ServiceColorSet {
         switch self {
         case .portainer: return ServiceColorSet(primary: Color(hex: "#13B5EA"), dark: Color(hex: "#0D8ECF"), bg: Color(hex: "#13B5EA").opacity(0.09))

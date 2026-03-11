@@ -40,6 +40,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -54,6 +55,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.runtime:runtime-saveable")
     implementation("androidx.activity:activity-compose:1.10.0")
 
     // Material 3 Expressive

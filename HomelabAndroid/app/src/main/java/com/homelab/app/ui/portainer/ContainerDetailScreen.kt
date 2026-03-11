@@ -198,7 +198,7 @@ private fun DetailTabContent(
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(stringResource(R.string.beszel_info_title), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.portainer_info_title), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             InfoRow(stringResource(R.string.portainer_image), detail.config.image)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
